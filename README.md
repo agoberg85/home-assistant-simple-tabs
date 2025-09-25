@@ -1,8 +1,5 @@
 # Simple Tabs Card
 
-[![GitHub Release][releases-shield]][releases]
-[![License][license-shield]](LICENSE.md)
-
 A clean, highly configurable, and responsive tabs card for Home Assistant Lovelace.
 
 ## Features
