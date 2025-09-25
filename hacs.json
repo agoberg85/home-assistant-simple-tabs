@@ -1,5 +1,5 @@
 {
-    "name": "Boilerplate Card",
+    "name": "Simple Tabs Card",
     "render_readme": true,
-    "filename": "boilerplate-card.js"
-}
+    "filename": "dist/simple-tabs.js"
+  }
