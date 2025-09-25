@@ -65,13 +65,21 @@ This will create two centered tabs using your theme's default colors.
 
 ```yaml
 type: custom:simple-tabs
+pre-load: true
+alignment: center
+background-color: "#2a2a2a"
+border-color: "#555555"
+text-color: "#bbbbbb"
+hover-color: "#ffffff"
+active-text-color: "#000000"
+active-background: "linear-gradient(90deg, #ffde00, #ff9900)"
 tabs:
   - title: Weather
+    icon: mdi:abacus
     card:
-      type: weather-forecast
-      entity: weather.your_entity
+      type: markdown
+      content: Weather card goes here
   - title: Lights
     card:
-      type: entities
-      entities:
-        - light.living_room
+      type: markdown
+      content: Lights card goes here
