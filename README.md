@@ -2,6 +2,8 @@
 
 A clean, highly configurable, and responsive tabs card for Home Assistant Lovelace.
 
+![Simple Tabs Card Screenshot](https://raw.githubusercontent.com/agoberg85/home-assistant-simple-tabs/main/simple-tabs-gif.gif)
+
 ## Features
 
 - **Organize Your Dashboard:** Group any Lovelace cards into a clean, tabbed interface to save space and reduce clutter.
@@ -83,3 +85,8 @@ tabs:
     card:
       type: markdown
       content: Lights card goes here
+
+## Roadmap ahead
+
+- **Visual Configuration Editor:** The card is currently YAML only. Need to build a GUI editor.
+- **More styling options:** Add more configuration options for for example font size, font weight, tab spacing, and button border-radius.
