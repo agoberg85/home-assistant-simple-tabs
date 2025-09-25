@@ -26,7 +26,7 @@ A clean, highly configurable, and responsive tabs card for Home Assistant Lovela
 
 ### Manual Installation
 
-1.  Download the `simple-tabs.js` file from the latest [release]([releases]).
+1.  Download the `simple-tabs.js` file from the latest [release](https://github.com/agoberg85/home-assistant-simple-tabs/releases).
 2.  Copy the file to the `www` directory in your Home Assistant `config` folder.
 3.  In your Lovelace dashboard, go to "Manage Resources" and add a new resource:
     - URL: `/local/simple-tabs.js`
@@ -91,3 +91,8 @@ tabs:
 
 - **Visual Configuration Editor:** The card is currently YAML only. Need to build a GUI editor.
 - **More styling options:** Add more configuration options for for example font size, font weight, tab spacing, and button border-radius.
+
+## Support development
+
+Buy me a coffee: https://buymeacoffee.com/mysmarthomeblog
+Subscribe to YouTube channel: https://www.youtube.com/@My_Smart_Home
