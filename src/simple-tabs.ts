@@ -3,11 +3,42 @@ import { customElement, property, state } from 'lit/decorators.js';
 import {
   HomeAssistant,
   LovelaceCard,
-  LovelaceCardEditor,
   LovelaceCardConfig,
 } from 'custom-card-helpers';
 import { styleMap } from 'lit/directives/style-map.js';
-import { deepEqual } from './deep-equal';
+
+export function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+
+  if (a && b && typeof a === 'object' && typeof b === 'object') {
+    if ((a as Record<string, unknown>).constructor !== (b as Record<string, unknown>).constructor) {
+      return false;
+    }
+
+    if (Array.isArray(a) && Array.isArray(b)) {
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        if (!deepEqual(a[i], b[i])) return false;
+      }
+      return true;
+    }
+
+    const keysA = Object.keys(a as Record<string, unknown>);
+    const keysB = Object.keys(b as Record<string, unknown>);
+
+    if (keysA.length !== keysB.length) return false;
+
+    for (const key of keysA) {
+      if (!keysB.includes(key) || !deepEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key])) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  return false;
+}
 
 export interface TabConfig {
   title: string;
@@ -15,11 +46,10 @@ export interface TabConfig {
   card: LovelaceCardConfig;
 }
 
-// NEW: Added the optional 'pre-load' boolean
 export interface TabsCardConfig {
   type: string;
   tabs: TabConfig[];
-  'pre-load'?: boolean; 
+  'pre-load'?: boolean;
   alignment?: 'start' | 'center' | 'end';
   'background-color'?: string;
   'border-color'?: string;
@@ -31,10 +61,11 @@ export interface TabsCardConfig {
 
 declare global {
   interface Window {
-    loadCardHelpers?: () => Promise<any>;
+    loadCardHelpers?: () => Promise<unknown>;
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 @customElement('simple-tabs')
 export class SimpleTabs extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
@@ -51,10 +82,9 @@ export class SimpleTabs extends LitElement {
       this._cards = await this._createCards(config.tabs);
     }
     
-    // NEW: Set the default for 'pre-load' to false
     this._config = {
       alignment: 'center',
-      'pre-load': false, // Lazy-loading is the safer default
+      'pre-load': false,
       ...config,
     };
   }
@@ -69,10 +99,11 @@ export class SimpleTabs extends LitElement {
       .filter(tab => tab && tab.card && tab.title)
       .map(async (tab) => {
         try {
-          const element = helpers.createCardElement(tab.card) as LovelaceCard;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const element = (helpers as any).createCardElement(tab.card) as LovelaceCard;
           element.hass = this.hass;
           return element;
-        } catch (e) {
+        } catch (e: unknown) {
           console.error('Error creating card:', tab.card, e);
           return null;
         }
@@ -109,65 +140,23 @@ export class SimpleTabs extends LitElement {
       '--simple-tabs-active-bg': this._config['active-background'],
     };
 
-    // NEW: The core logic for switching rendering modes
     let contentTemplate: TemplateResult;
 
     if (this._config['pre-load']) {
-      // Eager/Pre-loading mode: render all cards, hide inactive ones with CSS
-      contentTemplate = html`
-        <div class="content-container">
-          ${this._cards.map((card, index) => html`
-            <div class="tab-panel" id="tabpanel-${index}" role="tabpanel" ?hidden=${this._selectedTabIndex !== index}>
-              ${card}
-            </div>
-          `)}
-        </div>
-      `;
+      contentTemplate = html`<div class="content-container">${this._cards.map((card, index) => html`<div class="tab-panel" id="tabpanel-${index}" role="tabpanel" ?hidden=${this._selectedTabIndex !== index}>${card}</div>`)}</div>`;
     } else {
-      // Lazy-loading mode: render only the active card
-      contentTemplate = html`
-        <div class="content-container">
-          <div class="tab-panel" id="tabpanel-${this._selectedTabIndex}" role="tabpanel">
-            ${this._cards[this._selectedTabIndex]}
-          </div>
-        </div>
-      `;
+      contentTemplate = html`<div class="content-container"><div class="tab-panel" id="tabpanel-${this._selectedTabIndex}" role="tabpanel">${this._cards[this._selectedTabIndex]}</div></div>`;
     }
 
-    return html`
-      <div class="card-container" style=${styleMap(styles)}>
-        <div class="tabs" role="tablist">
-          <!-- The buttons part of the template remains the same -->
-          ${this._config.tabs.map((tab, index) => {
-            if (!this._cards[index]) return html``;
-            return html`
-              <button class="tab-button ${index === this._selectedTabIndex ? 'active' : ''}" @click=${() => (this._selectedTabIndex = index)} role="tab" aria-selected="${index === this._selectedTabIndex}" aria-controls="tabpanel-${index}">
-                ${tab.icon ? html`<ha-icon .icon=${tab.icon}></ha-icon>` : ''}
-                <span>${tab.title}</span>
-              </button>
-            `;
-          })}
-        </div>
-        
-        <!-- Render the content based on the selected mode -->
-        ${contentTemplate}
-      </div>
-    `;
+    return html`<div class="card-container" style=${styleMap(styles)}><div class="tabs" role="tablist">${this._config.tabs.map((tab, index) => { if (!this._cards[index]) return html``; return html`<button class="tab-button ${index === this._selectedTabIndex ? 'active' : ''}" @click=${() => (this._selectedTabIndex = index)} role="tab" aria-selected="${index === this._selectedTabIndex}" aria-controls="tabpanel-${index}">${tab.icon ? html`<ha-icon .icon=${tab.icon}></ha-icon>` : ''}<span>${tab.title}</span></button>`;})}</div>${contentTemplate}</div>`;
   }
 
-  // NEW: CSS is updated to support both modes
   static styles = css`
     .tabs { display: flex; flex-wrap: wrap; justify-content: var(--simple-tabs-justify-content, center); gap: 10px; }
     .tab-button { background: var(--simple-tabs-bg-color, none); border: 1px solid var(--simple-tabs-border-color, var(--divider-color)); cursor: pointer; padding: 8px 16px; font-size: var(--ha-font-size-m); color: var(--simple-tabs-text-color, var(--secondary-text-color)); position: relative; border-radius: 24px; transition: all 0.3s; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
     .tab-button:hover { border-color: var(--simple-tabs-hover-color, var(--primary-text-color)); color: var(--simple-tabs-hover-color, var(--primary-text-color)); }
     .tab-button.active { border-color: transparent; color: var(--simple-tabs-active-text-color, var(--text-primary-color)); background: var(--simple-tabs-active-bg, var(--primary-color)); }
-
-    .content-container {
-        padding-top: 12px;
-    }
-    
-    .tab-panel[hidden] {
-      display: none;
-    }
+    .content-container { padding-top: 12px; }
+    .tab-panel[hidden] { display: none; }
   `;
 }
