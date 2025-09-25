@@ -94,5 +94,5 @@ tabs:
 
 ## Support development
 
-[bmc]: https://buymeacoffee.com/mysmarthomeblog
-[youtube]: https://www.youtube.com/@My_Smart_Home
+Buy me a coffee: https://buymeacoffee.com/mysmarthomeblog
+Subscribe to Youtube channel: https://www.youtube.com/@My_Smart_Home
