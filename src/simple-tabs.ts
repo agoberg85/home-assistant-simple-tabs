@@ -152,6 +152,7 @@ export class SimpleTabs extends LitElement {
   }
 
   static styles = css`
+  ha-icon {margin-left: -6px;}
   .tabs {
     display: flex;
     flex-wrap: wrap;

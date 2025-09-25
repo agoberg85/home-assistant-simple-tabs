@@ -74,17 +74,18 @@ border-color: "#555555"
 text-color: "#bbbbbb"
 hover-color: "#ffffff"
 active-text-color: "#000000"
-active-background: "linear-gradient(90deg, #ffde00, #ff9900)"
+active-background: linear-gradient(122deg,rgba(230, 163, 222, 1) 20%, rgba(0, 212, 255, 1) 150%)
 tabs:
   - title: Weather
-    icon: mdi:abacus
+    icon: mdi:weather-sunny
     card:
       type: markdown
       content: Weather card goes here
   - title: Lights
+    icon: mdi:lightbulb
     card:
       type: markdown
-      content: Lights card goes here
+      content: Lights goes here
 ```
 
 ## Roadmap ahead

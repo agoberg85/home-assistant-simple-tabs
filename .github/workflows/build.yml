@@ -1,20 +1,28 @@
-name: 'Build'
+name: 'Build Check'
 
 on:
   push:
     branches:
-      - master
+      - main  # Corrected from 'master'
   pull_request:
     branches:
-      - master
+      - main  # Corrected from 'master'
 
 jobs:
   build:
     name: Test build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
-      - name: Build
-        run: |
-          npm install
-          npm run build
+      - name: Checkout the repository
+        uses: actions/checkout@v3 # Use a modern version of the checkout action
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18' # Specify a stable Node.js version
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run build
+        run: npm run build

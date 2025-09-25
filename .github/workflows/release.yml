@@ -6,25 +6,28 @@ on:
 
 jobs:
   release:
-    name: Prepare release
+    name: Create Release Asset
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - name: Checkout the repository
+        uses: actions/checkout@v3
 
-      # Build
-      - name: Build the file
-        run: |
-          cd /home/runner/work/boilerplate-card/boilerplate-card
-          npm install
-          npm run build
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
 
-      # Upload build file to the releas as an asset.
-      - name: Upload zip to release
-        uses: svenstaro/upload-release-action@v1-release
+      - name: Install dependencies
+        run: npm install
 
+      - name: Build the production file
+        run: npm run build
+
+      - name: Upload the card to the release
+        uses: svenstaro/upload-release-action@v2 # Use a modern version of the upload action
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: /home/runner/work/boilerplate-card/boilerplate-card/dist/boilerplate-card.js
-          asset_name: boilerplate-card.js
+          file: dist/simple-tabs.js           # Corrected path to your built file
+          asset_name: simple-tabs.js          # Corrected name for the release asset
           tag: ${{ github.ref }}
           overwrite: true
