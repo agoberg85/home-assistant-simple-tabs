@@ -16,7 +16,14 @@ export default {
     nodeResolve(),
     commonjs(),
     typescript(),
-    dev && serve({ contentBase: '.', host: '0.0.0.0', port: 5000 }),
+    dev && serve({
+      contentBase: '.',
+      host: '0.0.0.0',
+      port: 5000,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+      },
+    }),
     !dev && terser({ format: { comments: false } }),
   ],
 };
