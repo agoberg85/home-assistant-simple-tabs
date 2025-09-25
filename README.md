@@ -94,5 +94,7 @@ tabs:
 
 ## Support development
 
-Buy me a coffee: https://buymeacoffee.com/mysmarthomeblog
-Subscribe to YouTube channel: https://www.youtube.com/@My_Smart_Home
+[bmc-shield]: https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black
+[bmc]: https://buymeacoffee.com/mysmarthomeblog
+[youtube-shield]: https://img.shields.io/badge/Subscribe-FF0000?style=for-the-badge&logo=youtube&logoColor=white
+[youtube]: https://www.youtube.com/@My_Smart_Home
