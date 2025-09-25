@@ -1,6 +1,6 @@
 # Simple Tabs Card
 
-A clean, highly configurable, and responsive tabs card for Home Assistant Lovelace.
+A clean and configurable tabs card for Home Assistant Dashboards.
 
 ![Simple Tabs Card Screenshot](https://raw.githubusercontent.com/agoberg85/home-assistant-simple-tabs/main/simple-tabs-gif.gif)
 
