@@ -32,7 +32,7 @@ A clean, highly configurable, and responsive tabs card for Home Assistant Lovela
     - URL: `/local/simple-tabs.js`
     - Resource Type: `JavaScript Module`
 
-** PS: Card does NOT show up in the Card Selector in Home Assistant. Will need to select the manual option.**
+**PS: Card does NOT show up in the Card Selector in Home Assistant. Will need to select the manual option.**
 
 ## Configuration
 
