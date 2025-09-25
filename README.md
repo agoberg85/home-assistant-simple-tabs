@@ -85,6 +85,7 @@ tabs:
     card:
       type: markdown
       content: Lights card goes here
+```
 
 ## Roadmap ahead
 
