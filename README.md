@@ -19,8 +19,8 @@ A clean, highly configurable, and responsive tabs card for Home Assistant Lovela
 1.  Go to the HACS page in your Home Assistant instance.
 2.  Click on "Frontend" and then the three-dot menu in the top right.
 3.  Select "Custom repositories".
-4.  In the "Repository" field, paste the URL of this repository.
-5.  For "Category", select "Lovelace".
+4.  In the "Repository" field, paste the URL of this repository (https://github.com/agoberg85/home-assistant-simple-tabs).
+5.  For "Category", select "Dashboard".
 6.  Click "Add".
 7.  The `simple-tabs-card` will now appear in the HACS Frontend list. Click "Install".
 
