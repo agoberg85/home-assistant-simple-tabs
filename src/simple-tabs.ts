@@ -155,7 +155,13 @@ export class SimpleTabs extends LitElement {
     .tabs { display: flex; flex-wrap: wrap; justify-content: var(--simple-tabs-justify-content, center); gap: 10px; }
     .tab-button { background: var(--simple-tabs-bg-color, none); border: 1px solid var(--simple-tabs-border-color, var(--divider-color)); cursor: pointer; padding: 8px 16px; font-size: var(--ha-font-size-m); color: var(--simple-tabs-text-color, var(--secondary-text-color)); position: relative; border-radius: 24px; transition: all 0.3s; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
     .tab-button:hover { border-color: var(--simple-tabs-hover-color, var(--primary-text-color)); color: var(--simple-tabs-hover-color, var(--primary-text-color)); }
-    .tab-button.active { border-color: transparent; color: var(--simple-tabs-active-text-color, var(--text-primary-color)); background: var(--simple-tabs-active-bg, var(--primary-color)); }
+    .tab-button.active { 
+      border-color: transparent; 
+      color: var(--simple-tabs-active-text-color, var(--text-primary-color)); 
+      background: var(--simple-tabs-active-bg, var(--primary-color)); 
+      background-repeat: no-repeat;
+      background-size: cover;      
+    }
     .content-container { padding-top: 12px; }
     .tab-panel[hidden] { display: none; }
   `;
