@@ -6,11 +6,12 @@ A clean and configurable tabs card for Home Assistant Dashboards.
 
 ## Features
 
-- **Organize Your Dashboard:** Group any Lovelace cards into a clean, tabbed interface to save space and reduce clutter.
+- **Organize Your Dashboard:** Group any Dashboard cards into a clean, tabbed interface to save space and reduce clutter.
 - **Tab Icons:** Add icon to your tab titles.
 - **Stylable:** Customize colors for the background, border, text, and active tab.
 - **Alignment:** Align your tabs to the start, center, or end of the card.
 - **Performance:** Use the default "lazy-loading" for the best performance, or enable "pre-loading" for instantaneous tab switching.
+- **Conditional Tabs:** Dynamically show or hide tabs based on entity states or complex jinja templates.
 
 ## Installation
 
