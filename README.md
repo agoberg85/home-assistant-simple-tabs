@@ -60,7 +60,7 @@ Each entry in the `tabs` list is an object with the following properties:
 | `title` | string | Optional* | The text to display on the tab. |
 | `icon` | string | Optional* | An MDI icon to display next to the title (e.g., `mdi:lightbulb`). |
 | `card` | object | **Required** | A standard Lovelace card configuration. |
-| `conditions` | list | Optional | A list of conditions that must be met to show the tab |
+| `conditions` | list | Optional | A list of conditions that must be met to show the tab. See [EXAMPLES.md](examples.md) |
 
 *Either title or icon has to be defined.
 
