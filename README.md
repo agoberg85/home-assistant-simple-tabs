@@ -57,9 +57,12 @@ Each entry in the `tabs` list is an object with the following properties:
 
 | Name | Type | Required? | Description |
 | :--- | :--- | :--- | :--- |
-| `title` | string | **Required** | The text to display on the tab. |
-| `card` | object | **Required** | A standard Lovelace card configuration. |
+| `title` | string | Optional | The text to display on the tab. |
 | `icon` | string | Optional | An MDI icon to display next to the title (e.g., `mdi:lightbulb`). |
+| `card` | object | **Required** | A standard Lovelace card configuration. |
+| `conditions` | list | Optional | A list of conditions that must be met to show the tab |
+
+**PS: Either title or icon has to be defined.**
 
 ## Example Usage
 
@@ -80,6 +83,10 @@ active-background: linear-gradient(122deg,rgba(230, 163, 222, 1) 20%, rgba(0, 21
 tabs:
   - title: Weather
     icon: mdi:weather-sunny
+    conditions:
+      - entity: input_boolean.zone_home
+        state: "on"
+      - template: "{{ now().hour < 17 }}"    
     card:
       type: markdown
       content: Weather card goes here
@@ -94,6 +101,10 @@ tabs:
 
 - **Visual Configuration Editor:** The card is currently YAML only. Need to build a GUI editor.
 - **More styling options:** Add more configuration options for for example font size, font weight, tab spacing, and button border-radius.
+- **Touch navigation:** Add support for touch/swipe navigation on mobile devices.
+- **Animations:** Add animations when switching between tabs.
+- **URL support:** Make tabs linkable via URLs (like #tab-2)
+- **Badges:** Option to add badges (text, number, color) to tab buttons.
 
 ## Support development
 

@@ -1,6 +1,6 @@
 {
   "name": "simple-tabs-card",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "description": "A simple, configurable tabs card for Home Assistant Lovelace.",
   "main": "dist/simple-tabs.js",
   "module": "dist/simple-tabs.js",
@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "custom-card-helpers": "^1.9.0",
-    "lit": "^2.8.0"
+    "lit": "^3.0.0",
+    "home-assistant-js-websocket": "^9.0.0"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^25.0.4",
