@@ -62,7 +62,7 @@ Each entry in the `tabs` list is an object with the following properties:
 | `card` | object | **Required** | A standard Lovelace card configuration. |
 | `conditions` | list | Optional | A list of conditions that must be met to show the tab |
 
-*** Either title or icon has to be defined.**
+*Either title or icon has to be defined.
 
 ## Example Usage
 
