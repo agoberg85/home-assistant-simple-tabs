@@ -60,6 +60,8 @@ export class SimpleTabs extends LitElement {
   @state() private _cards: (LovelaceCard | null)[] = [];
   @state() private _selectedTabIndex = 0;
   @state() private _tabVisibility: boolean[] = [];
+  @state() private _renderedTitles: (string | undefined)[] = [];
+  @state() private _renderedIcons: (string | undefined)[] = [];
 
   static getStubConfig(): Record<string, unknown> {
     return {
@@ -91,22 +93,18 @@ export class SimpleTabs extends LitElement {
   public connectedCallback(): void {
     super.connectedCallback();
     
-    // Cancel cleanup if reconnected
     if (this._disconnectCleanupTimeout) {
       clearTimeout(this._disconnectCleanupTimeout);
       this._disconnectCleanupTimeout = undefined;
     }
     
-    // Add resize listener for overflow recalculation
     window.addEventListener('resize', this._handleResize);
   }
   
-  // Update your disconnectedCallback to remove the resize listener:
   public async disconnectedCallback(): Promise<void> {
     super.disconnectedCallback();
-    window.removeEventListener('resize', this._handleResize); // Add this line
+    window.removeEventListener('resize', this._handleResize);
     
-    // Defer cleanup to avoid unnecessary work during DOM moves
     this._disconnectCleanupTimeout = window.setTimeout(() => {
       if (!this.isConnected) {
         this._unsubscribeTemplates();
@@ -114,7 +112,6 @@ export class SimpleTabs extends LitElement {
     }, 0);
   }
   
-  // Add the resize handler method:
   private _handleResize = (): void => {
     this._updateOverflowState();
   };
@@ -136,6 +133,8 @@ export class SimpleTabs extends LitElement {
     if (configHasChanged) {
       this._cards = config['pre-load'] ? await this._createCards(config.tabs) : new Array(config.tabs.length).fill(null);
       this._tabVisibility = new Array(config.tabs.length).fill(true);
+      this._renderedTitles = config.tabs.map(tab => tab.title);
+      this._renderedIcons = config.tabs.map(tab => tab.icon);
       this._unsubscribeTemplates();
       await this._subscribeToTemplates(config.tabs);
     }
@@ -143,63 +142,102 @@ export class SimpleTabs extends LitElement {
     this._config = { alignment: 'center', 'pre-load': false, ...config };
   }
 
+  private _isTemplate(value: string | undefined): boolean {
+    return typeof value === 'string' && (value.includes('{{') || value.includes('{%'));
+  }
+
   private async _subscribeToTemplates(tabs: TabConfig[]): Promise<void> {
     const subscriptionPromises: Promise<void>[] = [];
 
     tabs.forEach((tab, index) => {
       const templateConditions = tab.conditions?.filter(c => 'template' in c) as TemplateCondition[] | undefined;
-      if (!templateConditions?.length) {
-        return;
+      if (templateConditions?.length) {
+        templateConditions.forEach(condition => {
+          const subscriptionPromise = this.hass.connection.subscribeMessage<{result: any}>(
+            (message) => {
+              const result = message.result;
+              let isTrue = false;
+              if (typeof result === 'boolean') {
+                isTrue = result;
+              } else if (typeof result === 'string') {
+                const lowerResult = result.toLowerCase().trim();
+                isTrue = lowerResult === 'true' || (lowerResult !== 'false' && lowerResult !== '');
+              } else if (typeof result === 'number') {
+                isTrue = result !== 0;
+              } else {
+                isTrue = !!result;
+              }
+              
+              if (this._tabVisibility[index] !== isTrue) {
+                this._tabVisibility[index] = isTrue;
+                this.requestUpdate();
+              }
+            },
+            {
+              type: 'render_template',
+              template: condition.template,
+            }
+          ).then(unsubscribe => {
+            this._templateUnsubscribers.push(unsubscribe);
+          });
+          
+          subscriptionPromises.push(subscriptionPromise);
+        });
       }
 
-      // Handle all template conditions for the tab - they must ALL be true
-      templateConditions.forEach(condition => {
+      if (this._isTemplate(tab.title)) {
         const subscriptionPromise = this.hass.connection.subscribeMessage<{result: any}>(
-          (message) => {
-            // Home Assistant returns template results in message.result
-            const result = message.result;
-            
-            // Convert result to boolean - handle various data types
-            let isTrue = false;
-            if (typeof result === 'boolean') {
-              isTrue = result;
-            } else if (typeof result === 'string') {
-              const lowerResult = result.toLowerCase().trim();
-              isTrue = lowerResult === 'true' || (lowerResult !== 'false' && lowerResult !== '');
-            } else if (typeof result === 'number') {
-              isTrue = result !== 0;
-            } else {
-              isTrue = !!result;
+            (message) => {
+                const newTitle = message.result;
+                if (this._renderedTitles[index] !== newTitle) {
+                    this._renderedTitles = [
+                        ...this._renderedTitles.slice(0, index),
+                        newTitle,
+                        ...this._renderedTitles.slice(index + 1)
+                    ];
+                }
+            },
+            {
+                type: 'render_template',
+                template: tab.title,
             }
-            
-            if (this._tabVisibility[index] !== isTrue) {
-              this._tabVisibility[index] = isTrue;
-              this.requestUpdate();
-            }
-          },
-          {
-            type: 'render_template',
-            template: condition.template,
-          }
         ).then(unsubscribe => {
-          this._templateUnsubscribers.push(unsubscribe);
+            this._templateUnsubscribers.push(unsubscribe);
         });
-        
         subscriptionPromises.push(subscriptionPromise);
-      });
+      }
+
+      if (this._isTemplate(tab.icon)) {
+        const subscriptionPromise = this.hass.connection.subscribeMessage<{result: any}>(
+            (message) => {
+                const newIcon = message.result;
+                if (this._renderedIcons[index] !== newIcon) {
+                    this._renderedIcons = [
+                        ...this._renderedIcons.slice(0, index),
+                        newIcon,
+                        ...this._renderedIcons.slice(index + 1)
+                    ];
+                }
+            },
+            {
+                type: 'render_template',
+                template: tab.icon,
+            }
+        ).then(unsubscribe => {
+            this._templateUnsubscribers.push(unsubscribe);
+        });
+        subscriptionPromises.push(subscriptionPromise);
+      }
     });
 
-    // Wait for all subscriptions to be established
     await Promise.all(subscriptionPromises);
   }
 
   protected shouldUpdate(changedProps: Map<string | symbol, unknown>): boolean {
-    // Always update if config or internal state changes
-    if (changedProps.has('_config') || changedProps.has('_tabVisibility') || changedProps.has('_selectedTabIndex')) {
+    if (changedProps.has('_config') || changedProps.has('_tabVisibility') || changedProps.has('_selectedTabIndex') || changedProps.has('_renderedTitles') || changedProps.has('_renderedIcons')) {
       return true;
     }
 
-    // For hass changes, only update if relevant entity states changed
     if (changedProps.has('hass')) {
       const oldHass = changedProps.get('hass') as HomeAssistant;
       if (oldHass && this._config?.tabs) {
@@ -212,7 +250,7 @@ export class SimpleTabs extends LitElement {
           );
         }
       }
-      return true; // Update if no relevant entities to check
+      return true;
     }
 
     return false;
@@ -279,7 +317,6 @@ export class SimpleTabs extends LitElement {
     const canScrollLeft = tabsContainer.scrollLeft > 0;
     const canScrollRight = tabsContainer.scrollLeft < (tabsContainer.scrollWidth - tabsContainer.clientWidth);
     
-    // Update fade indicators visibility on the wrapper element
     (containerWrapper as HTMLElement).style.setProperty('--left-fade-opacity', canScrollLeft ? '1' : '0');
     (containerWrapper as HTMLElement).style.setProperty('--right-fade-opacity', canScrollRight ? '1' : '0');
   }
@@ -310,14 +347,11 @@ export class SimpleTabs extends LitElement {
       this._cards.forEach((card) => { if (card) card.hass = this.hass; });
     }
     
-    // Add these lines:
     if (changedProps.has('_selectedTabIndex')) {
       this._scrollToActiveTab();
     }
     
-    // Update overflow state when config or visibility changes
     if (changedProps.has('_config') || changedProps.has('_tabVisibility')) {
-      // Use requestAnimationFrame to ensure DOM is updated
       requestAnimationFrame(() => this._updateOverflowState());
     }
   }
@@ -351,7 +385,6 @@ export class SimpleTabs extends LitElement {
           return html`<div class="tab-panel" ?hidden=${this._selectedTabIndex !== index}>${this._cards[index]}</div>`
         })}</div>`;
       } else {
-        // Lazy load card if not pre-loaded
         if (this._selectedTabIndex >= 0 && !this._cards[this._selectedTabIndex]) {
           this._ensureCard(this._selectedTabIndex);
         }
@@ -364,17 +397,19 @@ export class SimpleTabs extends LitElement {
           <div class="tabs" role="tablist" @scroll=${this._updateOverflowState}>
             ${visibleTabs.map(({ tab, originalIndex }) => {
               if (!this._config['pre-load'] && !this._cards[originalIndex] && originalIndex !== this._selectedTabIndex) {
-                // For non-preloaded cards, we still show the tab button
               } else if (this._config['pre-load'] && !this._cards[originalIndex]) {
                 return html``;
               }
+
+              const renderedTitle = this._renderedTitles[originalIndex];
+              const renderedIcon = this._renderedIcons[originalIndex];
               
               return html`<button
                 class="tab-button ${originalIndex === this._selectedTabIndex ? 'active' : ''}"
                 @click=${() => (this._selectedTabIndex = originalIndex)}
             >
-                ${tab.icon ? html`<ha-icon .icon=${tab.icon}></ha-icon>` : ''}
-                ${tab.title ? html`<span>${tab.title}</span>` : ''}  <!-- Conditional span rendering */
+                ${renderedIcon ? html`<ha-icon .icon=${renderedIcon}></ha-icon>` : ''}
+                ${renderedTitle ? html`<span>${renderedTitle}</span>` : ''}
             </button>`;
           
             })}
@@ -421,20 +456,20 @@ export class SimpleTabs extends LitElement {
       z-index: 10;
       will-change: opacity;
       transform: translateZ(0);
-      opacity: var(--left-fade-opacity, 0); /* Use CSS variables for dynamic control */
+      opacity: var(--left-fade-opacity, 0);
       transition: opacity 0.3s ease;
     }
 
-    .tabs-container::before { /* Left fade */
+    .tabs-container::before {
       left: 0;
       background: linear-gradient(to right, var(--primary-background-color, white), transparent);
       opacity: var(--left-fade-opacity, 0);
     }
 
-    .tabs-container::after { /* Right fade */
+    .tabs-container::after {
       right: 0;
       background: linear-gradient(to left, var(--primary-background-color, white), transparent);
-      opacity: var(--right-fade-opacity, 0); /* Change this line - was using left-fade-opacity */
+      opacity: var(--right-fade-opacity, 0);
     }  
     .tabs { 
       display: flex; 
@@ -468,6 +503,7 @@ export class SimpleTabs extends LitElement {
       align-items: center; 
       justify-content: center; 
       gap: 8px; 
+      text-wrap: nowrap;
     }
     .tab-button:hover { outline-color: var(--simple-tabs-hover-color, var(--primary-text-color)); color: var(--simple-tabs-hover-color, var(--primary-text-color)); }
     .tab-button.active { 
@@ -481,11 +517,11 @@ export class SimpleTabs extends LitElement {
     .error { padding: 16px; color: var(--error-color); text-align: center; }
   `;
 }
-// This tells Home Assistant that your card is loaded and ready to be used
+
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "simple-tabs",
   name: "Simple Tabs",
-  preview: true, // Shows a preview in the card picker
-  description: "A card to display multiple cards in a tabbed interface." // Optional
+  preview: true,
+  description: "A card to display multiple cards in a tabbed interface."
 });
