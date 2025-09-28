@@ -1,11 +1,11 @@
 import { LitElement, html, css, TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import {
+import { styleMap } from 'lit/directives/style-map.js';
+import type {
   HomeAssistant,
   LovelaceCard,
   LovelaceCardConfig,
 } from 'custom-card-helpers';
-import { styleMap } from 'lit/directives/style-map.js';
 
 // Optimized config comparison - only checks relevant properties
 function configChanged(oldConfig: TabsCardConfig | undefined, newConfig: TabsCardConfig): boolean {
@@ -48,7 +48,8 @@ export interface TabsCardConfig {
 
 declare global { 
   interface Window { 
-    loadCardHelpers?: () => Promise<unknown>; 
+    loadCardHelpers?: () => Promise<unknown>;
+    customCards?: { type: string; name: string; preview?: boolean; description?: string; }[];
   } 
 }
 
@@ -59,6 +60,30 @@ export class SimpleTabs extends LitElement {
   @state() private _cards: (LovelaceCard | null)[] = [];
   @state() private _selectedTabIndex = 0;
   @state() private _tabVisibility: boolean[] = [];
+
+  static getStubConfig(): Record<string, unknown> {
+    return {
+      type: 'custom:simple-tabs',
+      tabs: [
+        {
+          title: 'Tab 1',
+          icon: 'mdi:home',
+          card: {
+            type: 'markdown',
+            content: 'Content for Tab 1',
+          },
+        },
+        {
+          title: 'Tab 2',
+          icon: 'mdi:cog',
+          card: {
+            type: 'markdown',
+            content: 'Content for Tab 2',
+          },
+        },
+      ],
+    };
+  }
 
   private _templateUnsubscribers: (() => void)[] = [];
   private _disconnectCleanupTimeout?: number;
@@ -415,7 +440,7 @@ export class SimpleTabs extends LitElement {
       display: flex; 
       flex-wrap: nowrap; 
       justify-content: var(--simple-tabs-justify-content, center); 
-      gap: 10px; 
+      gap: 6px; 
       overflow-x: auto;
       overflow-y: hidden;
       padding: 1px;
@@ -456,3 +481,11 @@ export class SimpleTabs extends LitElement {
     .error { padding: 16px; color: var(--error-color); text-align: center; }
   `;
 }
+// This tells Home Assistant that your card is loaded and ready to be used
+window.customCards = window.customCards || [];
+window.customCards.push({
+  type: "simple-tabs",
+  name: "Simple Tabs",
+  preview: true, // Shows a preview in the card picker
+  description: "A card to display multiple cards in a tabbed interface." // Optional
+});

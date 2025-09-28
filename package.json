@@ -14,12 +14,12 @@
   },
   "dependencies": {
     "custom-card-helpers": "^1.9.0",
-    "lit": "^3.0.0",
-    "home-assistant-js-websocket": "^9.0.0"
+    "home-assistant-js-websocket": "^9.0.0",
+    "lit": "^3.0.0"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^25.0.4",
-    "@rollup/plugin-node-resolve": "^15.2.1",
+    "@rollup/plugin-node-resolve": "^15.3.1",
     "@rollup/plugin-terser": "^0.4.3",
     "@types/node": "^20.5.9",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
