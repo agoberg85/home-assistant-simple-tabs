@@ -7,7 +7,6 @@ import type {
   LovelaceCardConfig,
 } from 'custom-card-helpers';
 
-// Optimized config comparison - only checks relevant properties
 function configChanged(oldConfig: TabsCardConfig | undefined, newConfig: TabsCardConfig): boolean {
   if (!oldConfig) return true;
   if (oldConfig.tabs.length !== newConfig.tabs.length) return true;
@@ -36,6 +35,7 @@ export interface TabConfig {
 export interface TabsCardConfig {
   type: string;
   tabs: TabConfig[];
+  default_tab?: number;
   'pre-load'?: boolean;
   alignment?: 'start' | 'center' | 'end';
   'background-color'?: string;
@@ -66,6 +66,7 @@ export class SimpleTabs extends LitElement {
   static getStubConfig(): Record<string, unknown> {
     return {
       type: 'custom:simple-tabs',
+      default_tab: 1,
       tabs: [
         {
           title: 'Tab 1',
@@ -83,7 +84,7 @@ export class SimpleTabs extends LitElement {
             content: 'Content for Tab 2',
           },
         },
-      ],
+      ]
     };
   }
 
@@ -137,6 +138,19 @@ export class SimpleTabs extends LitElement {
       this._renderedIcons = config.tabs.map(tab => tab.icon);
       this._unsubscribeTemplates();
       await this._subscribeToTemplates(config.tabs);
+
+      // Set the initial selected tab index based on the default_tab config
+      let initialTabIndex = 0;
+      if (config.default_tab !== undefined) {
+        // Use a 1-based index for user-friendliness, so subtract 1 for the array index
+        const defaultIndex = config.default_tab - 1;
+        if (defaultIndex >= 0 && defaultIndex < config.tabs.length) {
+          initialTabIndex = defaultIndex;
+        } else {
+          console.warn(`[Simple Tabs] Invalid default_tab index: ${config.default_tab}. It must be between 1 and ${config.tabs.length}. Falling back to the first tab.`);
+        }
+      }
+      this._selectedTabIndex = initialTabIndex;
     }
     
     this._config = { alignment: 'center', 'pre-load': false, ...config };
@@ -320,7 +334,6 @@ export class SimpleTabs extends LitElement {
     (containerWrapper as HTMLElement).style.setProperty('--left-fade-opacity', canScrollLeft ? '1' : '0');
     (containerWrapper as HTMLElement).style.setProperty('--right-fade-opacity', canScrollRight ? '1' : '0');
   }
-   
 
   private async _createCards(tabConfigs: TabConfig[]): Promise<(LovelaceCard | null)[]> {
     const helpers = await window.loadCardHelpers?.();
@@ -503,6 +516,7 @@ export class SimpleTabs extends LitElement {
       align-items: center; 
       justify-content: center; 
       gap: 8px; 
+      font-family: var(--primary-font-family);
       text-wrap: nowrap;
     }
     .tab-button:hover { outline-color: var(--simple-tabs-hover-color, var(--primary-text-color)); color: var(--simple-tabs-hover-color, var(--primary-text-color)); }

@@ -44,6 +44,7 @@ A clean and configurable tabs card for Home Assistant Dashboards.
 | `type` | string | **Required** | `custom:simple-tabs` | |
 | `tabs` | list | **Required** | A list of tab objects to display. See below. | |
 | `alignment` | string | Optional | Justification for the row of tabs. (`start`, `center`, `end`) | `'center'` |
+| `default_tab` | number | Optional | Defines the default tab. If a tab is hidden via conditions it will fall back to the first visible tab. | `1` |
 | `pre-load` | boolean | Optional | If `true`, renders all tab content on load for faster switching. | `false` |
 | `background-color`| string | Optional | CSS color for the button background. | `none` |
 | `border-color` | string | Optional | CSS color for the button border. | Your theme's `divider-color` |
@@ -58,8 +59,8 @@ Each entry in the `tabs` list is an object with the following properties:
 
 | Name | Type | Required? | Description |
 | :--- | :--- | :--- | :--- |
-| `title` | string | Optional* | The text to display on the tab. |
-| `icon` | string | Optional* | An MDI icon to display next to the title (e.g., `mdi:lightbulb`). |
+| `title` | string | Optional* | The text to display on the tab. Can be jinja template |
+| `icon` | string | Optional* | An MDI icon to display next to the title (e.g., `mdi:lightbulb`). Can be jinja template |
 | `card` | object | **Required** | A standard Lovelace card configuration. |
 | `conditions` | list | Optional | A list of conditions that must be met to show the tab. See [EXAMPLES.md](EXAMPLES.md) |
 
@@ -74,6 +75,7 @@ This will create two centered tabs using your theme's default colors.
 ```yaml
 type: custom:simple-tabs
 pre-load: true
+default_tab: 2
 alignment: center
 background-color: "#2a2a2a"
 border-color: "#555555"
@@ -91,7 +93,7 @@ tabs:
     card:
       type: markdown
       content: Weather card goes here
-  - title: Lights
+  - title: Lights on: {{ states.light | selectattr('state','eq','on') | list | count }}
     icon: mdi:lightbulb
     card:
       type: markdown
