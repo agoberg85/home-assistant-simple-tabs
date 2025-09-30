@@ -93,7 +93,7 @@ tabs:
     card:
       type: markdown
       content: Weather card goes here
-  - title: Lights on: {{ states.light | selectattr('state','eq','on') | list | count }}
+  - title: "Lights on: {{ states.light | selectattr('state','eq','on') | list | count }}"
     icon: mdi:lightbulb
     card:
       type: markdown
