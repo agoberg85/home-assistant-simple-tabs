@@ -68,7 +68,7 @@ Each entry in the `tabs` list is an object with the following properties:
 
 ### Example Configuration
 
-This will create two centered tabs using your theme's default colors.
+This will create two centered tabs.
 
 ```yaml
 type: custom:simple-tabs
