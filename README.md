@@ -6,7 +6,7 @@ A clean and configurable tabs card for Home Assistant Dashboards.
 
 ## Features
 
-- **Organize Your Dashboard:** Group any Dashboard cards into a clean, tabbed interface to save space and reduce clutter.
+- **Organize Your Dashboard:** Group any Dashboard cards into a clean, tabbed interface.
 - **Tab Icons:** Add icon to your tab titles.
 - **Stylable:** Customize colors for the background, border, text, and active tab.
 - **Alignment:** Align your tabs to the start, center, or end of the card.
@@ -74,7 +74,7 @@ This will create two centered tabs using your theme's default colors.
 
 ```yaml
 type: custom:simple-tabs
-pre-load: true
+pre-load: false
 default_tab: 2
 alignment: center
 background-color: "#2a2a2a"
@@ -102,7 +102,7 @@ tabs:
 
 ## Roadmap ahead
 
-- **Visual Configuration Editor:** The card is currently YAML only. Need to build a GUI editor.
+- **Visual Configuration Editor:** The current version has a basic UI editor, will continue developing a more robust UI editor.
 - **More styling options:** Add more configuration options for for example font size, font weight, tab spacing, and button border-radius.
 - **Touch navigation:** Add support for touch/swipe navigation on mobile devices.
 - **Animations:** Add animations when switching between tabs.

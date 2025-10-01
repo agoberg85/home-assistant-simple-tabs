@@ -1,7 +1,7 @@
 {
   "name": "simple-tabs-card",
-  "version": "1.1.3",
-  "description": "A simple, configurable tabs card for Home Assistant Lovelace.",
+  "version": "1.1.4",
+  "description": "A simple, configurable tabs card for Home Assistant.",
   "main": "dist/simple-tabs.js",
   "module": "dist/simple-tabs.js",
   "author": "Your Name",
@@ -15,12 +15,14 @@
   "dependencies": {
     "custom-card-helpers": "^1.9.0",
     "home-assistant-js-websocket": "^9.0.0",
+    "js-yaml": "^4.1.0",
     "lit": "^3.0.0"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^25.0.4",
     "@rollup/plugin-node-resolve": "^15.3.1",
     "@rollup/plugin-terser": "^0.4.3",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.5.9",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
