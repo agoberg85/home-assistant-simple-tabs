@@ -33,8 +33,6 @@ A clean and configurable tabs card for Home Assistant Dashboards.
     - URL: `/local/simple-tabs.js`
     - Resource Type: `JavaScript Module`
 
-**PS: Card does NOT show up in the Card Selector in Home Assistant. Will need to select the manual option.**
-
 ## Configuration
 
 ### Main Options

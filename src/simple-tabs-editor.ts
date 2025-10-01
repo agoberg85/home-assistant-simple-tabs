@@ -134,6 +134,15 @@ export class SimpleTabsEditor extends LitElement {
     this._valueChanged({ ...this._config, tabs: newTabs });
   }
 
+  private _moveTab(index: number, direction: 'up' | 'down'): void {
+    if (!this._config) return;
+    const newTabs = [...this._config.tabs];
+    const [tab] = newTabs.splice(index, 1);
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    newTabs.splice(newIndex, 0, tab);
+    this._valueChanged({ ...this._config, tabs: newTabs });
+  }
+
   protected render(): TemplateResult {
     if (!this.hass || !this._config) {
       return html``;
@@ -145,6 +154,28 @@ export class SimpleTabsEditor extends LitElement {
         ${this._config.tabs.map((tab, index) => html`
             <ha-expansion-panel>
                 <div slot="header" class="summary-header">
+                    <div class="reorder-controls">
+                        <ha-icon
+                            class="reorder-btn"
+                            icon="mdi:arrow-up"
+                            title="Move Up"
+                            .disabled=${index === 0}
+                            @click=${(e: Event) => {
+                                e.stopPropagation();
+                                this._moveTab(index, 'up');
+                            }}
+                        ></ha-icon>
+                        <ha-icon
+                            class="reorder-btn"
+                            icon="mdi:arrow-down"
+                            title="Move Down"
+                            .disabled=${index === this._config.tabs.length - 1}
+                            @click=${(e: Event) => {
+                                e.stopPropagation();
+                                this._moveTab(index, 'down');
+                            }}
+                        ></ha-icon>
+                    </div>
                     <ha-textfield
                         class="summary-title"
                         .name=${'title'}
@@ -218,6 +249,7 @@ export class SimpleTabsEditor extends LitElement {
     }
     .remove-icon {
       color: var(--secondary-text-color);
+      padding: 0 8px;
     }
     .add-btn {
         background: var(--accent-color);
@@ -230,6 +262,19 @@ export class SimpleTabsEditor extends LitElement {
       padding: 16px;
       display: grid;
       gap: 16px;
+    }
+    .reorder-controls {
+        display: flex;
+        align-items: center;
+        padding-left: 8px;
+    }
+    .reorder-btn {
+        cursor: pointer;
+        color: var(--secondary-text-color);
+    }
+    .reorder-btn[disabled] {
+        opacity: 0.3;
+        pointer-events: none;
     }
   `;
 }
