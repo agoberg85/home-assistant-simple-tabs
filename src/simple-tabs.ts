@@ -217,11 +217,30 @@ export class SimpleTabs extends LitElement {
   }
 
   protected shouldUpdate(changedProps: Map<string | symbol, unknown>): boolean {
-    if (changedProps.has('_config') || changedProps.has('_cards') || changedProps.has('_tabVisibility') || changedProps.has('_selectedTabIndex') || changedProps.has('_renderedTitles') || changedProps.has('_renderedIcons')) {
+    // Always update if the configuration, selected tab, or visibility changes.
+    if (
+      changedProps.has('_config') ||
+      changedProps.has('_selectedTabIndex') ||
+      changedProps.has('_tabVisibility') ||
+      changedProps.has('_renderedTitles') ||
+      changedProps.has('_renderedIcons')
+    ) {
       return true;
     }
+  
     const oldHass = changedProps.get('hass') as HomeAssistant | undefined;
-    return !oldHass || oldHass.themes !== this.hass.themes || oldHass.locale !== this.hass.locale;
+  
+    // If there's no old hass object, we need to update.
+    if (!oldHass) {
+      return true;
+    }
+  
+    // This is the key change: we check if the entity states have changed.
+    // We also check 'localize' for language changes.
+    return (
+      oldHass.states !== this.hass.states ||
+      oldHass.localize !== this.hass.localize
+    );
   }
   
   private _shouldShowTab(tab: TabConfig, index: number): boolean {
@@ -391,12 +410,10 @@ export class SimpleTabs extends LitElement {
       '--simple-tabs-active-bg': this._config['active-background'],
     };
 
-    const content = this._config['pre-load']
-      ? this._config.tabs.map((tab, index) => html`
-          <div class="tab-panel" ?hidden=${this._selectedTabIndex !== index}>
-            ${this._shouldShowTab(tab, index) ? this._cards[index] : ''}
-          </div>`)
-      : (this._cards[this._selectedTabIndex] || html``);
+    const content = this._config.tabs.map((tab, index) => html`
+    <div class="tab-panel" ?hidden=${this._selectedTabIndex !== index}>
+      ${this._shouldShowTab(tab, index) ? this._cards[index] : ''}
+    </div>`);
       
     const alignmentClass = `align-${this._config.alignment || 'center'}`;
 

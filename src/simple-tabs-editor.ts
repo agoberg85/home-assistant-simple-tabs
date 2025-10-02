@@ -183,6 +183,7 @@ export class SimpleTabsEditor extends LitElement {
                         placeholder="Tab Title"
                         @input=${(e: Event) => this._handleTabChange(e, index)}
                         @click=${(e: Event) => e.stopPropagation()}
+                        @keydown=${(e: KeyboardEvent) => e.stopPropagation()}
                     ></ha-textfield>
                     <ha-icon
                         class="remove-icon"
