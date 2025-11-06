@@ -50,6 +50,9 @@ A clean and configurable tabs card for Home Assistant Dashboards.
 | `hover-color` | string | Optional | CSS color for button text and border on hover. | Your theme's `primary-text-color`|
 | `active-text-color`| string | Optional | CSS color for the active tab's text. | Your theme's `text-primary-color`|
 | `active-background`| string | Optional | CSS color/gradient for the active tab's background. | Your theme's `primary-color` |
+| `container_background`| string | Optional | CSS color/gradient for the background color of the container. | none |
+| `container_padding`| string | Optional | Container padding | 0 |
+| `container_rounding`| string | Optional | Border radius of the container | 0 |
 
 ### Tab Object Options
 
