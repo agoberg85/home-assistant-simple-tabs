@@ -48,6 +48,10 @@ export interface TabsCardConfig {
   'hover-color'?: string;
   'active-text-color'?: string;
   'active-background'?: string;
+  margin?: string;
+  container_background?: string;
+  container_padding?: string;
+  container_rounding?: string;  
 }
 
 declare global { 
@@ -401,22 +405,29 @@ export class SimpleTabs extends LitElement {
         });
     }
     
-    const styles = {
+    const styles: { [key: string]: string | undefined } = {
       '--simple-tabs-bg-color': this._config['background-color'],
       '--simple-tabs-border-color': this._config['border-color'],
       '--simple-tabs-text-color': this._config['text-color'],
       '--simple-tabs-hover-color': this._config['hover-color'],
       '--simple-tabs-active-text-color': this._config['active-text-color'],
       '--simple-tabs-active-bg': this._config['active-background'],
+      '--simple-tabs-container-bg': this._config.container_background,
+      '--simple-tabs-container-padding': this._config.container_padding,
+      '--simple-tabs-container-rounding': this._config.container_rounding,      
     };
-
+    
+    if (this._config.margin) {
+      styles.margin = this._config.margin;
+    }
+    
     const content = this._config.tabs.map((tab, index) => html`
-    <div class="tab-panel" ?hidden=${this._selectedTabIndex !== index}>
-      ${this._shouldShowTab(tab, index) ? this._cards[index] : ''}
-    </div>`);
+      <div class="tab-panel" ?hidden=${this._selectedTabIndex !== index}>
+        ${this._shouldShowTab(tab, index) ? this._cards[index] : ''}
+      </div>`);
       
     const alignmentClass = `align-${this._config.alignment || 'center'}`;
-
+    
     return html`
       <div class="card-container" style=${styleMap(styles)}>
         <div class="tabs-container ${alignmentClass}">
@@ -442,7 +453,9 @@ export class SimpleTabs extends LitElement {
     .card-container {
       position: relative;
       isolation: isolate;
-      margin-bottom: 24px;
+      background: var(--simple-tabs-container-bg, none);
+      padding: var(--simple-tabs-container-padding, 0);
+      border-radius: var(--simple-tabs-container-rounding, 0);
     }
 
     .tabs-container {
