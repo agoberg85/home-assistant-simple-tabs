@@ -1,6 +1,6 @@
 {
   "name": "simple-tabs-card",
-  "version": "1.1.6",
+  "version": "1.1.7",
   "description": "A simple, configurable tabs card for Home Assistant.",
   "main": "dist/simple-tabs.js",
   "module": "dist/simple-tabs.js",
