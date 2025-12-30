@@ -4,14 +4,21 @@ A clean and configurable tabs card for Home Assistant Dashboards.
 
 ![Simple Tabs Card Screenshot](https://raw.githubusercontent.com/agoberg85/home-assistant-simple-tabs/main/simple-tabs-gif.gif)
 
+## Support development
+
+Buy me a coffee: https://buymeacoffee.com/mysmarthomeblog
+Subscribe to Youtube channel: https://www.youtube.com/@My_Smart_Home
+
 ## Features
 
 - **Organize Your Dashboard:** Group any Dashboard cards into a clean, tabbed interface.
 - **Tab Icons:** Add icon to your tab titles.
 - **Stylable:** Customize colors for the background, border, text, and active tab.
 - **Alignment:** Align your tabs to the start, center, or end of the card.
-- **Performance:** Use the default "lazy-loading" for the best performance, or enable "pre-loading" for instantaneous tab switching.
+- **Dynamic Defaults:** Change the default tab automatically based on your home's state (e.g., show "Remote" tab when TV is on).
+- **User Privacy:** Hide specific tabs from specific users (e.g., hide admin controls from guests).
 - **Conditional Tabs:** Dynamically show or hide tabs based on entity states or complex jinja templates.
+- **Performance:** Use the default "lazy-loading" for the best performance, or enable "pre-loading" for instantaneous tab switching.
 
 ## Installation
 
@@ -42,7 +49,8 @@ A clean and configurable tabs card for Home Assistant Dashboards.
 | `type` | string | **Required** | `custom:simple-tabs` | |
 | `tabs` | list | **Required** | A list of tab objects to display. See below. | |
 | `alignment` | string | Optional | Justification for the row of tabs. (`start`, `center`, `end`) | `'center'` |
-| `default_tab` | number | Optional | Defines the default tab. If a tab is hidden via conditions it will fall back to the first visible tab. | `1` |
+| `default_tab` | number/list | Optional | Defines the default tab. Can be a static number (1-based) or a list of conditional rules (see Advanced Configuration). | `1` |
+| `hide_inactive_tab_titles` | boolean | Optional | If `true`, hides the title text on tabs that are not currently active (showing only the icon). | `false` |
 | `pre-load` | boolean | Optional | If `true`, renders all tab content on load for faster switching. | `false` |
 | `background-color`| string | Optional | CSS color for the button background. | `none` |
 | `border-color` | string | Optional | CSS color for the button border. | Your theme's `divider-color` |
@@ -63,42 +71,84 @@ Each entry in the `tabs` list is an object with the following properties:
 | `title` | string | Optional* | The text to display on the tab. Can be jinja template |
 | `icon` | string | Optional* | An MDI icon to display next to the title (e.g., `mdi:lightbulb`). Can be jinja template |
 | `card` | object | **Required** | A standard Lovelace card configuration. |
-| `conditions` | list | Optional | A list of conditions that must be met to show the tab. See [EXAMPLES.md](EXAMPLES.md) |
+| `conditions` | list | Optional | A list of conditions (`entity`, `template`, or `user`) that must be met to show the tab. |
 
 *Either title or icon has to be defined.
 
+## Advanced Configuration
+
+### Dynamic Default Tab
+
+Instead of a static number, `default_tab` can be a list of rules. The card will check them from top to bottom and select the first one that matches.
+
+**Note:** It is recommended to use `entity` state checks here rather than `template` for faster initial loading.
+
+```yaml
+default_tab:
+  # 1. If TV is on, open Tab 2 (Controls)
+  - tab: 2
+    conditions:
+      - entity: media_player.tv
+        state: 'on'
+  # 2. If it is night time, open Tab 3 (Bedroom)
+  - tab: 3
+    conditions:
+      - entity: sun.sun
+        state: 'below_horizon'
+  # 3. Fallback to Tab 1
+  - tab: 1
+```
+
+### User Visibility (Privacy)
+
+You can hide specific tabs from specific users by adding a `user` condition. You will need the long User ID string (found in HA Settings -> People -> Users -> Click User -> ID at bottom).
+
+```yaml
+tabs:
+  - title: Admin Controls
+    icon: mdi:shield-account
+    conditions:
+      - user: 
+          - "8234982374982374982374"  # Dad
+          - "1928371928371928371928"  # Mom
+    card:
+       # ...
+```
+
 ## Example Usage
 
-### Example Configuration
+### Full Example
 
-This will create two centered tabs.
+This configuration demonstrates dynamic defaults, user restrictions, and the compact "hide inactive titles" style.
 
 ```yaml
 type: custom:simple-tabs
-pre-load: false
-default_tab: 2
-alignment: center
-background-color: "#2a2a2a"
-border-color: "#555555"
-text-color: "#bbbbbb"
-hover-color: "#ffffff"
-active-text-color: "#000000"
-active-background: linear-gradient(122deg,rgba(230, 163, 222, 1) 20%, rgba(0, 212, 255, 1) 150%)
-tabs:
-  - title: Weather
-    icon: mdi:weather-sunny
+alignment: start
+hide_inactive_tab_titles: true
+default_tab:
+  - tab: 2
     conditions:
-      - entity: input_boolean.zone_home
-        state: "on"
-      - template: "{{ now().hour < 17 }}"    
+      - entity: light.kitchen_lights
+        state: 'on'
+  - tab: 1
+tabs:
+  - title: Livingroom
+    icon: mdi:sofa
     card:
       type: markdown
-      content: Weather card goes here
-  - title: "Lights on: {{ states.light | selectattr('state','eq','on') | list | count }}"
-    icon: mdi:lightbulb
+      content: Livingroom goes here
+  - title: Kitchen
+    icon: mdi:silverware-fork-knife
     card:
       type: markdown
-      content: Lights goes here
+      content: Kitchen goes here
+  - title: Admin
+    icon: mdi:cog
+    conditions:
+      - user: "YOUR_ADMIN_ID_HERE"
+    card:
+      type: markdown
+      content: Sensitive admin controls...
 ```
 
 ## Roadmap ahead
@@ -109,9 +159,3 @@ tabs:
 - **Animations:** Add animations when switching between tabs.
 - **URL support:** Make tabs linkable via URLs (like #tab-2)
 - **Badges:** Option to add badges (text, number, color) to tab buttons.
-
-## Support development
-
-Buy me a coffee: https://buymeacoffee.com/mysmarthomeblog
-
-Subscribe to Youtube channel: https://www.youtube.com/@My_Smart_Home
