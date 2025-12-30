@@ -7,6 +7,7 @@ A clean and configurable tabs card for Home Assistant Dashboards.
 ## Support development
 
 Buy me a coffee: https://buymeacoffee.com/mysmarthomeblog
+
 Subscribe to Youtube channel: https://www.youtube.com/@My_Smart_Home
 
 ## Features
