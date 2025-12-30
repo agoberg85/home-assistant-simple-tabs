@@ -12,6 +12,8 @@ declare global {
     'ha-icon-picker': HaIconPicker;
     'ha-textfield': HaTextField;
     'ha-expansion-panel': HaExpansionPanel;
+    'ha-formfield': HaFormField;
+    'ha-switch': HaSwitch;
   }
 }
 
@@ -40,6 +42,15 @@ interface HaExpansionPanel extends HTMLElement {
     expanded: boolean;
 }
 
+interface HaFormField extends HTMLElement {
+    label: string;
+}
+
+interface HaSwitch extends HTMLElement {
+    checked: boolean;
+    disabled: boolean;
+}
+
 
 // Helper function to safely stringify the card config into YAML
 function stringifyCard(card: LovelaceCardConfig | string): string {
@@ -47,22 +58,17 @@ function stringifyCard(card: LovelaceCardConfig | string): string {
 
   if (typeof card === 'string') {
     try {
-      // Try to parse the string as YAML.
       cardObject = yaml.load(card) as LovelaceCardConfig;
-      // If the parsed result is not an object (e.g., just a string or number),
-      // return the original string because we can't format it as a card.
       if (typeof cardObject !== 'object' || cardObject === null) {
         return card;
       }
     } catch (e) {
-      // If it's not valid YAML, return the string as is for the user to fix.
       return card;
     }
   } else {
     cardObject = card;
   }
 
-  // Now we are sure we have an object, dump it to a clean YAML string.
   try {
     return yaml.dump(cardObject, { skipInvalid: true, indent: 2 }).trimEnd();
   } catch (e) {
@@ -84,6 +90,13 @@ export class SimpleTabsEditor extends LitElement {
     fireEvent(this, 'config-changed', { config: newConfig });
   }
 
+  private _handleOptionChange(ev: Event): void {
+      if (!this._config) return;
+      const target = ev.target as HaSwitch;
+      const checked = target.checked;
+      this._valueChanged({ ...this._config, hide_inactive_tab_titles: checked });
+  }
+
   private _handleTabChange(ev: Event, index: number): void {
     if (!this._config) return;
 
@@ -91,13 +104,11 @@ export class SimpleTabsEditor extends LitElement {
     const newTabs = [...this._config.tabs];
     let value: string | object;
 
-    // FIX: Changed the unsafe type cast from 'HTMLInputElement' to a safer generic object type.
     const eventValue = (ev as CustomEvent).detail?.value ?? (target as { value: string }).value;
     const fieldName = target.name;
 
     if (fieldName === 'card') {
       try {
-        // Add indentation to each line of the input to make it valid YAML
         const indentedValue = eventValue
           .split('\n')
           .map((line: string) => `  ${line}`)
@@ -150,6 +161,15 @@ export class SimpleTabsEditor extends LitElement {
 
     return html`
       <div class="card-config">
+        <div class="global-options">
+            <ha-formfield label="Hide titles on inactive tabs">
+                <ha-switch 
+                    .checked=${this._config.hide_inactive_tab_titles || false}
+                    @change=${this._handleOptionChange}
+                ></ha-switch>
+            </ha-formfield>
+        </div>
+
         <div class="tabs-list">
         ${this._config.tabs.map((tab, index) => html`
             <ha-expansion-panel>
@@ -218,6 +238,11 @@ export class SimpleTabsEditor extends LitElement {
           <ha-icon icon="mdi:plus" style="margin-right: 8px;"></ha-icon>
           Add Tab
         </mwc-button>
+        
+        <p class="help-text">
+            <strong>Note:</strong> Advanced features like "Dynamic Default Tab" and "User Visibility" 
+            must be configured via the YAML code editor.
+        </p>
       </div>
     `;
   }
@@ -225,6 +250,12 @@ export class SimpleTabsEditor extends LitElement {
   static styles = css`
     .card-config {
       padding: 16px;
+    }
+    .global-options {
+        margin-bottom: 24px;
+        padding: 8px;
+        border: 1px solid var(--divider-color);
+        border-radius: 4px;
     }
     .tabs-list {
       display: flex;
@@ -238,6 +269,7 @@ export class SimpleTabsEditor extends LitElement {
       background: var(--sidebar-background-color);
     }
     p {margin: 12px 0 0 0;}
+    .help-text { font-size: 0.9em; color: var(--secondary-text-color); margin-top: 24px; }
     .summary-header {
       display: flex;
       align-items: center;
@@ -260,9 +292,10 @@ export class SimpleTabsEditor extends LitElement {
         color: var(--mdc-theme-on-secondary);
     }
     .card-content {
-      padding: 16px;
       display: grid;
       gap: 16px;
+      overflow: auto;
+      margin: 16px;
     }
     .reorder-controls {
         display: flex;

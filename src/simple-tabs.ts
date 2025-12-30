@@ -1,5 +1,5 @@
 import './simple-tabs-editor';
-import { LitElement, html, css, TemplateResult } from 'lit';
+import { LitElement, html, css, TemplateResult, PropertyValues } from 'lit';
 import { customElement, property, state, query } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import type {
@@ -9,11 +9,12 @@ import type {
   LovelaceCardEditor,
 } from 'custom-card-helpers';
 
-// (Interfaces like StateCondition, TabConfig, etc. remain the same)
-// ... (Your existing interfaces go here) ...
 function configChanged(oldConfig: TabsCardConfig | undefined, newConfig: TabsCardConfig): boolean {
   if (!oldConfig) return true;
   if (oldConfig.tabs.length !== newConfig.tabs.length) return true;
+  if (oldConfig.hide_inactive_tab_titles !== newConfig.hide_inactive_tab_titles) return true;
+  // Deep check for default_tab if it's an object/array
+  if (JSON.stringify(oldConfig.default_tab) !== JSON.stringify(newConfig.default_tab)) return true;
   
   return oldConfig.tabs.some((tab, index) => {
     const newTab = newConfig.tabs[index];
@@ -28,18 +29,27 @@ function configChanged(oldConfig: TabsCardConfig | undefined, newConfig: TabsCar
 
 export interface StateCondition { entity: string; state: string; }
 export interface TemplateCondition { template: string; }
+export interface UserCondition { user: string | string[]; }
+
+export type Condition = StateCondition | TemplateCondition | UserCondition;
 
 export interface TabConfig {
   title: string;
   icon?: string;
   card: LovelaceCardConfig;
-  conditions?: (StateCondition | TemplateCondition)[];
+  conditions?: Condition[];
+}
+
+export interface DefaultTabRule {
+  tab: number; // 1-based index
+  conditions?: Condition[];
 }
 
 export interface TabsCardConfig {
   type: string;
   tabs: TabConfig[];
-  default_tab?: number;
+  default_tab?: number | DefaultTabRule[];
+  hide_inactive_tab_titles?: boolean;
   'pre-load'?: boolean;
   alignment?: 'start' | 'center' | 'end';
   'background-color'?: string;
@@ -61,7 +71,6 @@ declare global {
   } 
 }
 
-
 @customElement('simple-tabs')
 export class SimpleTabs extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
@@ -79,6 +88,7 @@ export class SimpleTabs extends LitElement {
   private _templateUnsubscribers: (() => void)[] = [];
   private _disconnectCleanupTimeout?: number;
   private _hassSet = false;
+  private _initialized = false;
 
   static async getConfigElement(): Promise<LovelaceCardEditor> {
     return document.createElement('simple-tabs-editor') as LovelaceCardEditor;
@@ -147,21 +157,11 @@ export class SimpleTabs extends LitElement {
     this._tabVisibility = new Array(config.tabs.length).fill(true);
     this._renderedTitles = config.tabs.map(tab => tab.title);
     this._renderedIcons = config.tabs.map(tab => tab.icon);
+    this._initialized = false; // Reset initialization to allow default tab recalc
 
     if (this._hassSet) {
       this._subscribeToTemplates(this._config.tabs);
     }
-    
-    let initialTabIndex = 0;
-    if (config.default_tab !== undefined) {
-      const defaultIndex = config.default_tab - 1;
-      if (defaultIndex >= 0 && defaultIndex < config.tabs.length) {
-        initialTabIndex = defaultIndex;
-      } else {
-        console.warn(`[Simple Tabs] Invalid default_tab: ${config.default_tab}. Falling back to first tab.`);
-      }
-    }
-    this._selectedTabIndex = initialTabIndex;
 
     if (this._config['pre-load']) {
       this._createCards(this._config.tabs).then(cards => { this._cards = cards; });
@@ -221,7 +221,6 @@ export class SimpleTabs extends LitElement {
   }
 
   protected shouldUpdate(changedProps: Map<string | symbol, unknown>): boolean {
-    // Always update if the configuration, selected tab, or visibility changes.
     if (
       changedProps.has('_config') ||
       changedProps.has('_selectedTabIndex') ||
@@ -231,28 +230,80 @@ export class SimpleTabs extends LitElement {
     ) {
       return true;
     }
-  
     const oldHass = changedProps.get('hass') as HomeAssistant | undefined;
-  
-    // If there's no old hass object, we need to update.
-    if (!oldHass) {
-      return true;
-    }
-  
-    // This is the key change: we check if the entity states have changed.
-    // We also check 'localize' for language changes.
+    if (!oldHass) return true;
+
     return (
       oldHass.states !== this.hass.states ||
-      oldHass.localize !== this.hass.localize
+      oldHass.localize !== this.hass.localize ||
+      oldHass.user !== this.hass.user 
     );
   }
-  
+
+  /**
+   * Helper to check a single condition
+   */
+  private _checkCondition(c: Condition): boolean {
+    if ('entity' in c) {
+      return this.hass.states[c.entity]?.state === c.state;
+    }
+    if ('template' in c) {
+      // Templates are handled via subscriptions for visibility, 
+      // but for "one-off" checks (like default tab), we can't easily sync check template.
+      // However, usually default tab logic based on template isn't supported 
+      // synchronously on first load unless we have already subscribed.
+      // For visibility (reactive), we use the _tabVisibility array.
+      // For default tab logic, strictly templates are hard to support synchronously.
+      // We will skip templates for synchronous checks (default tab) or assume false.
+      return false; 
+    }
+    if ('user' in c) {
+        if (!this.hass.user) return false;
+        const allowed = Array.isArray(c.user) ? c.user : [c.user];
+        return allowed.includes(this.hass.user.id) || allowed.includes(this.hass.user.name);
+    }
+    return false;
+  }
+
   private _shouldShowTab(tab: TabConfig, index: number): boolean {
     return tab.conditions?.every(c => {
-      if ('entity' in c) return this.hass.states[c.entity]?.state === c.state;
+      // Use cached visibility for templates
       if ('template' in c) return this._tabVisibility[index];
-      return false;
+      // Use real-time check for others
+      return this._checkCondition(c);
     }) ?? true;
+  }
+
+  /**
+   * Calculates the default tab based on config rules
+   */
+  private _calculateDefaultTab(): number {
+    if (this._config.default_tab === undefined) return 0;
+
+    // Legacy: simple number
+    if (typeof this._config.default_tab === 'number') {
+        const idx = this._config.default_tab - 1;
+        return (idx >= 0 && idx < this._config.tabs.length) ? idx : 0;
+    }
+
+    // Dynamic: Array of rules
+    if (Array.isArray(this._config.default_tab)) {
+        for (const rule of this._config.default_tab) {
+            const index = rule.tab - 1;
+            // Validate index
+            if (index < 0 || index >= this._config.tabs.length) continue;
+
+            // Check conditions
+            if (!rule.conditions || rule.conditions.length === 0) {
+                return index; // No conditions = always match
+            }
+
+            const allMet = rule.conditions.every(c => this._checkCondition(c));
+            if (allMet) return index;
+        }
+    }
+
+    return 0;
   }
 
   private async _createCard(tabConfig: TabConfig): Promise<LovelaceCard | null> {
@@ -305,6 +356,38 @@ export class SimpleTabs extends LitElement {
     return Promise.all(cardPromises);
   }
 
+  protected updated(changedProps: PropertyValues): void {
+    super.updated(changedProps);
+
+    // Initial Setup requiring Hass
+    if (this.hass && this._config && !this._hassSet) {
+      this._hassSet = true;
+      this._subscribeToTemplates(this._config.tabs);
+    }
+
+    // Dynamic Default Tab Calculation (Run once when hass is ready)
+    if (this.hass && this._config && !this._initialized) {
+        this._selectedTabIndex = this._calculateDefaultTab();
+        this._initialized = true;
+    }
+
+    if (changedProps.has('hass')) {
+      this._cards.forEach(card => { if (card) card.hass = this.hass; });
+    }
+    
+    if (changedProps.has('_selectedTabIndex') && !this._config['pre-load']) {
+      this._ensureCard(this._selectedTabIndex);
+    }
+
+    if (changedProps.has('_selectedTabIndex')) {
+        this._scrollToActiveTab();
+    }
+    
+    if (changedProps.has('_config') || changedProps.has('_tabVisibility')) {
+      requestAnimationFrame(() => this._updateOverflowState());
+    }
+  }
+
   public firstUpdated(): void {
     requestAnimationFrame(() => this._scrollToActiveTab(false));
 
@@ -331,12 +414,11 @@ export class SimpleTabs extends LitElement {
     loadNext();
   }
   
-  // FIX: Updated drag handler to distinguish between click and drag
   private _handleDragStart(e: MouseEvent): void {
     const tabsEl = this._tabsEl;
     if (!tabsEl) return;
 
-    if (e.button !== 0) return; // Only drag with left mouse button
+    if (e.button !== 0) return; 
 
     let isDragging = false;
     const startX = e.pageX;
@@ -345,7 +427,6 @@ export class SimpleTabs extends LitElement {
     const handleDragMove = (em: MouseEvent): void => {
       const walk = em.pageX - startX;
       
-      // If we haven't started dragging and we've moved enough, start the drag
       if (!isDragging && Math.abs(walk) > 3) {
           isDragging = true;
           tabsEl.classList.add('dragging');
@@ -367,31 +448,6 @@ export class SimpleTabs extends LitElement {
     document.addEventListener('mouseup', handleDragEnd);
   }
 
-  protected updated(changedProps: Map<string | symbol, unknown>): void {
-    if (this.hass && this._config && !this._hassSet) {
-      this._hassSet = true;
-      this._subscribeToTemplates(this._config.tabs);
-    }
-
-    if (changedProps.has('hass')) {
-      this._cards.forEach(card => { if (card) card.hass = this.hass; });
-    }
-    
-    if (changedProps.has('_selectedTabIndex') && !this._config['pre-load']) {
-      this._ensureCard(this._selectedTabIndex);
-    }
-
-    // FIX: No changes here, but confirming that this call now correctly uses
-    // the default smooth scrolling for clicks.
-    if (changedProps.has('_selectedTabIndex')) {
-        this._scrollToActiveTab();
-    }
-    
-    if (changedProps.has('_config') || changedProps.has('_tabVisibility')) {
-      requestAnimationFrame(() => this._updateOverflowState());
-    }
-  }
-
   protected render(): TemplateResult {
     if (!this._config || !this.hass) return html``;
 
@@ -400,9 +456,14 @@ export class SimpleTabs extends LitElement {
       .filter(({ tab, originalIndex }) => this._shouldShowTab(tab, originalIndex));
 
     if (visibleTabs.length > 0 && !visibleTabs.some(({ originalIndex }) => originalIndex === this._selectedTabIndex)) {
-        Promise.resolve().then(() => {
-            this._selectedTabIndex = visibleTabs[0].originalIndex;
-        });
+        // Prevent infinite loops if selected tab becomes hidden
+        // Use timeout to push this to next tick
+        setTimeout(() => {
+             // Only update if still invalid
+             if (!visibleTabs.some(({ originalIndex }) => originalIndex === this._selectedTabIndex)) {
+                 this._selectedTabIndex = visibleTabs[0].originalIndex;
+             }
+        }, 0);
     }
     
     const styles: { [key: string]: string | undefined } = {
@@ -414,7 +475,8 @@ export class SimpleTabs extends LitElement {
       '--simple-tabs-active-bg': this._config['active-background'],
       '--simple-tabs-container-bg': this._config.container_background,
       '--simple-tabs-container-padding': this._config.container_padding,
-      '--simple-tabs-container-rounding': this._config.container_rounding,      
+      '--simple-tabs-container-rounding': this._config.container_rounding, 
+      '--simple-tabs-inactive-title-display': this._config.hide_inactive_tab_titles ? 'none' : 'inline',     
     };
     
     if (this._config.margin) {
@@ -462,6 +524,7 @@ export class SimpleTabs extends LitElement {
       position: relative;
       overflow: hidden;
     }
+    /* (Previous styles remain same) */
     .tabs-container::before, .tabs-container::after {
       content: '';
       position: absolute;
@@ -544,9 +607,14 @@ export class SimpleTabs extends LitElement {
       font-family: var(--primary-font-family);
       text-wrap: nowrap;
     }
-    .tab-button ha-icon { margin-left: -4px; }
     .tab-button:not(:has(span)) { padding: 8px 12px; }
     .tab-button:not(:has(span)) ha-icon { margin: 0; }
+    
+    /* New rule for hiding inactive titles */
+    .tab-button:not(.active) span {
+        display: var(--simple-tabs-inactive-title-display, inline);
+    }
+
     .tab-button:hover { 
       color: var(--simple-tabs-hover-color, var(--primary-text-color));
       outline-color: var(--simple-tabs-hover-color, var(--primary-text-color));
