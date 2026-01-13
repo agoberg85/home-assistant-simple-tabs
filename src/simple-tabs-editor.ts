@@ -5,7 +5,6 @@ import { TabsCardConfig } from './simple-tabs';
 import { LovelaceCardConfig } from 'custom-card-helpers/dist/types';
 import * as yaml from 'js-yaml';
 
-// Declare the types for Home Assistant's custom elements globally.
 declare global {
   interface HTMLElementTagNameMap {
     'ha-yaml-editor': HaYamlEditor;
@@ -51,8 +50,6 @@ interface HaSwitch extends HTMLElement {
     disabled: boolean;
 }
 
-
-// Helper function to safely stringify the card config into YAML
 function stringifyCard(card: LovelaceCardConfig | string): string {
   let cardObject: LovelaceCardConfig;
 
@@ -90,11 +87,16 @@ export class SimpleTabsEditor extends LitElement {
     fireEvent(this, 'config-changed', { config: newConfig });
   }
 
-  private _handleOptionChange(ev: Event): void {
+  private _toggleHideInactive(ev: Event): void {
       if (!this._config) return;
       const target = ev.target as HaSwitch;
-      const checked = target.checked;
-      this._valueChanged({ ...this._config, hide_inactive_tab_titles: checked });
+      this._valueChanged({ ...this._config, hide_inactive_tab_titles: target.checked });
+  }
+
+  private _toggleShowFade(ev: Event): void {
+      if (!this._config) return;
+      const target = ev.target as HaSwitch;
+      this._valueChanged({ ...this._config, show_fade: target.checked });
   }
 
   private _handleTabChange(ev: Event, index: number): void {
@@ -165,7 +167,14 @@ export class SimpleTabsEditor extends LitElement {
             <ha-formfield label="Hide titles on inactive tabs">
                 <ha-switch 
                     .checked=${this._config.hide_inactive_tab_titles || false}
-                    @change=${this._handleOptionChange}
+                    @change=${this._toggleHideInactive}
+                ></ha-switch>
+            </ha-formfield>
+            <br>
+            <ha-formfield label="Show scroll fade">
+                <ha-switch 
+                    .checked=${this._config.show_fade ?? true}
+                    @change=${this._toggleShowFade}
                 ></ha-switch>
             </ha-formfield>
         </div>
@@ -217,13 +226,29 @@ export class SimpleTabsEditor extends LitElement {
                 </div>
 
                 <div class="card-content">
-                    <ha-icon-picker
-                        .label=${'Icon'}
-                        .value=${tab.icon || ''}
-                        .name=${'icon'}
-                        @value-changed=${(e: Event) => this._handleTabChange(e, index)}
-                    ></ha-icon-picker>
-              <p>Card content (Only YAML for now):</p>
+                    <div class="tab-settings-row">
+                        <ha-icon-picker
+                            .label=${'Icon'}
+                            .value=${tab.icon || ''}
+                            .name=${'icon'}
+                            @value-changed=${(e: Event) => this._handleTabChange(e, index)}
+                        ></ha-icon-picker>
+                        <ha-textfield
+                            .label=${'Tab ID (for deep linking)'}
+                            .value=${tab.id || ''}
+                            .name=${'id'}
+                            @input=${(e: Event) => this._handleTabChange(e, index)}
+                        ></ha-textfield>
+                    </div>
+                    <ha-textfield
+                        .label=${'Badge Template (Jinja)'}
+                        .value=${tab.badge || ''}
+                        .name=${'badge'}
+                        placeholder="{{ is_state('light.kitchen', 'on') }}"
+                        @input=${(e: Event) => this._handleTabChange(e, index)}
+                    ></ha-textfield>
+
+                    <p>Card content (Only YAML for now):</p>
                     <ha-yaml-editor
                         .hass=${this.hass}
                         .name=${'card'}
@@ -240,8 +265,7 @@ export class SimpleTabsEditor extends LitElement {
         </mwc-button>
         
         <p class="help-text">
-            <strong>Note:</strong> Advanced features like "Dynamic Default Tab" and "User Visibility" 
-            must be configured via the YAML code editor.
+            <strong>Note:</strong> Advanced styling and logic features must be configured via the YAML code editor.
         </p>
       </div>
     `;
@@ -296,6 +320,11 @@ export class SimpleTabsEditor extends LitElement {
       gap: 16px;
       overflow: auto;
       margin: 16px;
+    }
+    .tab-settings-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
     }
     .reorder-controls {
         display: flex;
