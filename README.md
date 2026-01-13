@@ -60,8 +60,10 @@ Subscribe to Youtube channel: https://www.youtube.com/@My_Smart_Home
 | `active-text-color`| string | Optional | CSS color for the active tab's text. | Your theme's `text-primary-color`|
 | `active-background`| string | Optional | CSS color/gradient for the active tab's background. | Your theme's `primary-color` |
 | `container_background`| string | Optional | CSS color/gradient for the background color of the container. | none |
-| `container_padding`| string | Optional | Container padding | 0 |
-| `container_rounding`| string | Optional | Border radius of the container | 0 |
+| `container_padding`| string | Optional | Container padding | 12px |
+| `container_rounding`| string | Optional | Border radius of the container | 32px |
+| `tabs_gap`| string | Optional | Gap between buttons | 6px |
+| `button_padding`| string | Optional | Padding inside each button | 12px |
 
 ### Tab Object Options
 
@@ -73,6 +75,7 @@ Each entry in the `tabs` list is an object with the following properties:
 | `icon` | string | Optional* | An MDI icon to display next to the title (e.g., `mdi:lightbulb`). Can be jinja template |
 | `card` | object | **Required** | A standard Lovelace card configuration. |
 | `conditions` | list | Optional | A list of conditions (`entity`, `template`, or `user`) that must be met to show the tab. |
+| `badge:` | string | Optional* | Jinja template that outputs true/false |
 
 *Either title or icon has to be defined.
 
