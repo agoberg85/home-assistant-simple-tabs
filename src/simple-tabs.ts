@@ -245,27 +245,31 @@ export class SimpleTabs extends LitElement {
     return null;
   }
 
-  private _shouldBlockSwipe(target: EventTarget | null): boolean {
-    if (!(target instanceof HTMLElement)) return false;
+  private _shouldBlockSwipe(e: TouchEvent): boolean {
+    const path = e.composedPath();
 
-    // Check if target or any parent is an interactive element
-    let element: HTMLElement | null = target;
-    while (element && element !== this._contentEl) {
-      const tagName = element.tagName.toLowerCase();
-      const classList = element.classList;
+    for (const target of path) {
+      if (!(target instanceof HTMLElement)) continue;
 
-      // Block swipe on sliders and interactive elements
+      // Stop traversing if we reach the content container itself
+      if (target === this._contentEl) break;
+
+      const tagName = target.tagName.toLowerCase();
+      const classList = target.classList;
+
       if (
         tagName === 'input' ||
         tagName === 'ha-slider' ||
         tagName === 'mwc-slider' ||
+        tagName === 'swiper-container' ||
+        tagName === 'css-swipe-card' ||
+        tagName === 'swipe-card' ||
         classList.contains('slider') ||
         classList.contains('swiper') ||
-        element.hasAttribute('data-no-swipe')
+        target.hasAttribute('data-no-swipe')
       ) {
         return true;
       }
-      element = element.parentElement;
     }
     return false;
   }
@@ -741,7 +745,7 @@ export class SimpleTabs extends LitElement {
 
   private _handleTouchStart = (e: TouchEvent): void => {
     if (!this._config?.enable_swipe) return;
-    if (this._shouldBlockSwipe(e.target)) return;
+    if (this._shouldBlockSwipe(e)) return;
 
     const touch = e.touches[0];
     this._touchStartX = touch.clientX;
