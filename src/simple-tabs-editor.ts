@@ -120,7 +120,6 @@ export class SimpleTabsEditor extends LitElement {
   @state() private _config?: TabsCardConfig;
   @state() private _helpers?: any;
   @state() private _collapsedCards: Set<string> = new Set();
-  @state() private _cardPickerTabIndex: number | null = null;
   private _initialized = false;
 
   public setConfig(config: TabsCardConfig): void {
@@ -154,16 +153,17 @@ export class SimpleTabsEditor extends LitElement {
     fireEvent(this, 'config-changed', { config: newConfig });
   }
 
-  private _handleInputSelectChanged(ev: CustomEvent): void {
+  private _handleInputSelectChanged(ev: Event): void {
+    ev.stopPropagation();
     if (!this._config) return;
-    const value = ev.detail?.value || '';
+    const value = (ev as CustomEvent).detail?.value ?? '';
+    const newConfig = { ...this._config };
     if (value) {
-      this._valueChanged({ ...this._config, input_select_entity: value });
+      newConfig.input_select_entity = value;
     } else {
-      const newConfig = { ...this._config };
       delete newConfig.input_select_entity;
-      this._valueChanged(newConfig);
     }
+    this._valueChanged(newConfig);
   }
 
   private _toggleHideInactive(ev: Event): void {
@@ -262,21 +262,10 @@ export class SimpleTabsEditor extends LitElement {
   }
 
   /**
-   * Open the card picker for a tab
+   * Add a new card to a tab (inserts default card, user edits via visual editor)
    */
   private _addCard(tabIndex: number): void {
-    this._cardPickerTabIndex = tabIndex;
-  }
-
-  /**
-   * Handle card selection from the card picker
-   */
-  private _handleCardPicked(ev: CustomEvent, tabIndex: number): void {
-    ev.stopPropagation();
-    const cardConfig = ev.detail.config;
-    if (!cardConfig || !this._config) return;
-    this._cardPickerTabIndex = null;
-    this._insertCard(tabIndex, cardConfig);
+    this._insertCard(tabIndex, { type: 'markdown', content: '## New Card' });
   }
 
   /**
@@ -681,55 +670,23 @@ export class SimpleTabsEditor extends LitElement {
                         </div>
                       `;
       })}
-                      ${this._cardPickerTabIndex === index ? html`
-                        <div class="card-picker-container">
-                          <hui-card-picker
-                            .hass=${this.hass}
-                            .lovelace=${this._lovelaceConfig}
-                            @config-changed=${(ev: CustomEvent) => this._handleCardPicked(ev, index)}
-                          ></hui-card-picker>
-                          <mwc-button
-                            @click=${() => { this._cardPickerTabIndex = null; }}
-                            style="width: 100%; margin-top: 8px;"
-                          >
-                            Cancel
-                          </mwc-button>
-                        </div>
-                      ` : html`
-                        <button
-                          @click=${() => this._addCard(index)}
-                          style="width: 100%; padding: 12px; background: var(--primary-color); color: var(--text-primary-color); border: none; border-radius: 8px; cursor: pointer; font-size: 14px; margin-top: 8px;"
-                        >
-                          + Add Another Card
-                        </button>
-                      `}
+                      <button
+                        @click=${() => this._addCard(index)}
+                        style="width: 100%; padding: 12px; background: var(--primary-color); color: var(--text-primary-color); border: none; border-radius: 8px; cursor: pointer; font-size: 14px; margin-top: 8px;"
+                      >
+                        + Add Another Card
+                      </button>
                     ` : html`
                       <!-- Single card mode: Show visual editor with option to add more -->
                       <div style="margin-top: 16px;">
                         <p>Card content:</p>
                         ${this._renderCardEditor(tab.card, index, null, false)}
-                        ${this._cardPickerTabIndex === index ? html`
-                          <div class="card-picker-container">
-                            <hui-card-picker
-                              .hass=${this.hass}
-                              .lovelace=${this._lovelaceConfig}
-                              @config-changed=${(ev: CustomEvent) => this._handleCardPicked(ev, index)}
-                            ></hui-card-picker>
-                            <mwc-button
-                              @click=${() => { this._cardPickerTabIndex = null; }}
-                              style="width: 100%; margin-top: 8px;"
-                            >
-                              Cancel
-                            </mwc-button>
-                          </div>
-                        ` : html`
-                          <button
-                            @click=${() => this._addCard(index)}
-                            style="width: 100%; padding: 10px; background: var(--secondary-background-color); color: var(--primary-text-color); border: 1px solid var(--divider-color); border-radius: 8px; cursor: pointer; font-size: 14px; margin-top: 12px;"
-                          >
-                            + Add Another Card
-                          </button>
-                        `}
+                        <button
+                          @click=${() => this._addCard(index)}
+                          style="width: 100%; padding: 10px; background: var(--secondary-background-color); color: var(--primary-text-color); border: 1px solid var(--divider-color); border-radius: 8px; cursor: pointer; font-size: 14px; margin-top: 12px;"
+                        >
+                          + Add Another Card
+                        </button>
                       </div>
                     `}
                 </div>
