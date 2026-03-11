@@ -430,19 +430,21 @@ export class SimpleTabs extends LitElement {
     }
 
     // 2. Sync with input_select entity state
-    if (this._config?.input_select_entity && changedProps.has('hass')) {
+    if (this._config?.input_select_entity && (changedProps.has('hass') || changedProps.has('_config'))) {
       const options = this._getInputSelectOptions();
-      const currentState = this._getInputSelectState();
-      if (currentState && options.length > 0) {
-        const stateIndex = options.indexOf(currentState);
-        if (stateIndex >= 0 && stateIndex !== this._selectedTabIndex) {
-          this._selectedTabIndex = stateIndex;
+      if (options.length > 0) {
+        const currentState = this._getInputSelectState();
+        if (currentState) {
+          const stateIndex = options.indexOf(currentState);
+          if (stateIndex >= 0 && stateIndex !== this._selectedTabIndex) {
+            this._selectedTabIndex = stateIndex;
+          }
         }
-      }
 
-      // Ensure cards array matches options length
-      if (options.length !== this._cards.length) {
-        this._ensureInputSelectCards(options);
+        // Ensure cards array matches options length
+        if (options.length !== this._cards.length) {
+          this._ensureInputSelectCards(options);
+        }
       }
     }
 
