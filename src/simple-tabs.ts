@@ -15,6 +15,7 @@ function configChanged(oldConfig: TabsCardConfig | undefined, newConfig: TabsCar
   if (oldConfig.tabs.length !== newConfig.tabs.length) return true;
   if (oldConfig.hide_inactive_tab_titles !== newConfig.hide_inactive_tab_titles) return true;
   if (oldConfig.show_fade !== newConfig.show_fade) return true;
+  if (oldConfig.input_select_entity !== newConfig.input_select_entity) return true;
   if (JSON.stringify(oldConfig.default_tab) !== JSON.stringify(newConfig.default_tab)) return true;
 
   return oldConfig.tabs.some((tab, index) => {
@@ -91,6 +92,7 @@ export interface TabsCardConfig {
   swipe_threshold?: number;
   remember_tab?: boolean | 'per_device';
   haptic_feedback?: boolean;
+  input_select_entity?: string;
 }
 
 declare global {
@@ -149,6 +151,31 @@ export class SimpleTabs extends LitElement {
         { title: 'Tab 2', icon: 'mdi:cog', id: 'tab2', card: { type: 'markdown', content: 'Content 2' } },
       ]
     };
+  }
+
+  /**
+   * Get input_select options and current state
+   */
+  private _getInputSelectOptions(): string[] {
+    if (!this._config?.input_select_entity || !this.hass) return [];
+    const entity = this.hass.states[this._config.input_select_entity];
+    if (!entity) return [];
+    return entity.attributes?.options || [];
+  }
+
+  private _getInputSelectState(): string | undefined {
+    if (!this._config?.input_select_entity || !this.hass) return undefined;
+    return this.hass.states[this._config.input_select_entity]?.state;
+  }
+
+  /**
+   * Get the effective number of tabs (input_select options or config tabs)
+   */
+  private _getEffectiveTabCount(): number {
+    if (this._config?.input_select_entity) {
+      return this._getInputSelectOptions().length;
+    }
+    return this._config?.tabs?.length || 0;
   }
 
   private _loadHelpers(): Promise<void> {
@@ -280,7 +307,8 @@ export class SimpleTabs extends LitElement {
   }
 
   public async setConfig(config: TabsCardConfig): Promise<void> {
-    if (!config || !config.tabs) throw new Error('Invalid configuration');
+    if (!config || (!config.tabs && !config.input_select_entity)) throw new Error('Invalid configuration');
+    if (!config.tabs) config = { ...config, tabs: [] };
 
     if (!configChanged(this._config, config)) return;
 
@@ -401,7 +429,24 @@ export class SimpleTabs extends LitElement {
       this._calculateVisibleIndices();
     }
 
-    // 2. Ensure selected tab is valid (Auto-select first visible if current is hidden)
+    // 2. Sync with input_select entity state
+    if (this._config?.input_select_entity && changedProps.has('hass')) {
+      const options = this._getInputSelectOptions();
+      const currentState = this._getInputSelectState();
+      if (currentState && options.length > 0) {
+        const stateIndex = options.indexOf(currentState);
+        if (stateIndex >= 0 && stateIndex !== this._selectedTabIndex) {
+          this._selectedTabIndex = stateIndex;
+        }
+      }
+
+      // Ensure cards array matches options length
+      if (options.length !== this._cards.length) {
+        this._ensureInputSelectCards(options);
+      }
+    }
+
+    // 3. Ensure selected tab is valid (Auto-select first visible if current is hidden)
     if (this._visibleIndices.length > 0) {
       if (!this._visibleIndices.includes(this._selectedTabIndex)) {
         // Silently switch to the first available tab
@@ -410,13 +455,34 @@ export class SimpleTabs extends LitElement {
     }
   }
 
+  /**
+   * Ensure cards array matches input_select options
+   */
+  private _ensureInputSelectCards(options: string[]): void {
+    const newCards: (LovelaceCard | null)[] = new Array(options.length).fill(null);
+    // Copy existing cards that still fit
+    for (let i = 0; i < Math.min(this._cards.length, options.length); i++) {
+      newCards[i] = this._cards[i];
+    }
+    this._cards = newCards;
+    this._tabVisibility = new Array(options.length).fill(true);
+    this._visibleIndices = options.map((_, i) => i);
+    this._renderedBadges = new Array(options.length).fill(false);
+    this._renderedTitles = options;
+    // Pick up icons from config tabs if available
+    this._renderedIcons = options.map((_, i) =>
+      this._config.tabs?.[i]?.icon || undefined
+    );
+  }
+
   private _calculateVisibleIndices(): void {
     if (!this._config) return;
-    const newIndices = this._config.tabs
-      .map((_, i) => i)
+
+    const tabCount = this._getEffectiveTabCount();
+    const newIndices = Array.from({ length: tabCount }, (_, i) => i)
       .filter(i => {
-        const tab = this._config.tabs[i];
-        // Quick check for simple conditions (cached results)
+        const tab = this._config.tabs?.[i];
+        if (!tab) return true; // input_select tabs without config are always visible
         if (tab.conditions) {
           return tab.conditions.every(c => {
             if ('template' in c) return this._tabVisibility[i];
@@ -445,6 +511,14 @@ export class SimpleTabs extends LitElement {
 
     const oldHass = changedProps.get('hass') as HomeAssistant | undefined;
     if (!oldHass || !this.hass) return true;
+
+    // Fast check for input_select entity changes
+    if (this._config?.input_select_entity) {
+      const entityId = this._config.input_select_entity;
+      if (oldHass.states[entityId] !== this.hass.states[entityId]) {
+        return true;
+      }
+    }
 
     // Fast HASS update check
     return (
@@ -570,9 +644,33 @@ export class SimpleTabs extends LitElement {
   }
 
   private async _ensureCard(index: number): Promise<void> {
-    if (this._cards[index] || !this._config.tabs[index]) return;
-    const card = await this._createCard(this._config.tabs[index]);
+    if (this._cards[index]) return;
+
+    const tabConfig = this._config.tabs?.[index];
+    if (!tabConfig) {
+      // No tab config for this index (e.g. input_select with more options than tabs)
+      // Create an empty placeholder
+      const placeholder = await this._createPlaceholderCard();
+      this._cards = [...this._cards.slice(0, index), placeholder, ...this._cards.slice(index + 1)];
+      return;
+    }
+
+    const card = await this._createCard(tabConfig);
     this._cards = [...this._cards.slice(0, index), card, ...this._cards.slice(index + 1)];
+  }
+
+  private async _createPlaceholderCard(): Promise<LovelaceCard | null> {
+    try {
+      await this._loadHelpers();
+      const element = this._helpers.createCardElement({
+        type: 'markdown',
+        content: ' ',
+      }) as LovelaceCard;
+      element.hass = this.hass;
+      return element;
+    } catch {
+      return null;
+    }
   }
 
   private _scrollToActiveTab(smooth = true): void {
@@ -623,6 +721,22 @@ export class SimpleTabs extends LitElement {
     if (this.hass && this._config && !this._hassSet) {
       this._hassSet = true;
       this._subscribeToTemplates(this._config.tabs);
+
+      // Initialize input_select tabs on first hass
+      if (this._config.input_select_entity) {
+        const options = this._getInputSelectOptions();
+        if (options.length > 0) {
+          this._ensureInputSelectCards(options);
+          // Set initial tab from entity state
+          const currentState = this._getInputSelectState();
+          if (currentState) {
+            const stateIndex = options.indexOf(currentState);
+            if (stateIndex >= 0) {
+              this._selectedTabIndex = stateIndex;
+            }
+          }
+        }
+      }
     }
 
     if (window.location.href !== this._lastCheckedUrl) {
@@ -692,8 +806,8 @@ export class SimpleTabs extends LitElement {
   private _startBackgroundCardLoading(): void {
     if (!this._config) return;
 
-    const tabsToLoad = this._config.tabs
-      .map((_, index) => index)
+    const tabCount = this._getEffectiveTabCount();
+    const tabsToLoad = Array.from({ length: tabCount }, (_, i) => i)
       .filter(index => index !== this._selectedTabIndex && !this._cards[index]);
 
     const loadNext = () => {
@@ -813,8 +927,6 @@ export class SimpleTabs extends LitElement {
     if (index === this._selectedTabIndex) return;
 
     // Calculate direction
-    // If wrapping support is added later, logic needs update. For now simple index comparison.
-    // RTL support might invert this logic visually.
     const direction = index > this._selectedTabIndex ? 'right' : 'left';
 
     this._prevSelectedTabIndex = this._selectedTabIndex;
@@ -822,15 +934,25 @@ export class SimpleTabs extends LitElement {
     this._transitionDirection = direction;
 
     // Reset transition direction after animation to prevent sticking
-    // We use a timeout slightly longer than CSS transition (300ms)
     setTimeout(() => {
       this._transitionDirection = 'none';
-      this._prevSelectedTabIndex = index; // Ensure we don't keep old tab in DOM forever
+      this._prevSelectedTabIndex = index;
     }, 350);
 
     this._saveTabToMemory(index);
     if (userInitiated) {
       this._triggerHaptic();
+
+      // Sync input_select entity when user clicks a tab
+      if (this._config?.input_select_entity && this.hass) {
+        const options = this._getInputSelectOptions();
+        if (index < options.length) {
+          this.hass.callService('input_select', 'select_option', {
+            entity_id: this._config.input_select_entity,
+            option: options[index],
+          });
+        }
+      }
     }
   }
 

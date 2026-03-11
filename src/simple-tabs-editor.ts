@@ -16,6 +16,7 @@ declare global {
     'hui-card-element-editor': HuiCardElementEditor;
     'hui-card-picker': HuiCardPicker;
     'ha-icon-button': HaIconButton;
+    'ha-entity-picker': HaEntityPicker;
   }
 }
 
@@ -68,6 +69,13 @@ interface HaIconButton extends HTMLElement {
 interface HuiCardPicker extends HTMLElement {
   hass?: HomeAssistant;
   lovelace?: any;
+}
+
+interface HaEntityPicker extends HTMLElement {
+  hass?: HomeAssistant;
+  value?: string;
+  label?: string;
+  includeDomains?: string[];
 }
 
 function stringifyCard(card: LovelaceCardConfig | string | undefined): string {
@@ -144,6 +152,18 @@ export class SimpleTabsEditor extends LitElement {
 
   private _valueChanged(newConfig: TabsCardConfig): void {
     fireEvent(this, 'config-changed', { config: newConfig });
+  }
+
+  private _handleInputSelectChanged(ev: CustomEvent): void {
+    if (!this._config) return;
+    const value = ev.detail?.value || '';
+    if (value) {
+      this._valueChanged({ ...this._config, input_select_entity: value });
+    } else {
+      const newConfig = { ...this._config };
+      delete newConfig.input_select_entity;
+      this._valueChanged(newConfig);
+    }
   }
 
   private _toggleHideInactive(ev: Event): void {
@@ -463,7 +483,24 @@ export class SimpleTabsEditor extends LitElement {
     return html`
       <div class="card-config">
         <div class="global-options">
-            <h3>Display Settings</h3>
+            <h3>Input Select Entity</h3>
+            <p class="help-text" style="margin-top: 0; margin-bottom: 8px;">
+              Link to an input_select entity to auto-generate tabs from its options.
+            </p>
+            <ha-entity-picker
+              .hass=${this.hass}
+              .value=${this._config.input_select_entity || ''}
+              .label=${'Input Select Entity (optional)'}
+              .includeDomains=${['input_select']}
+              allow-custom-entity
+              @value-changed=${this._handleInputSelectChanged}
+            ></ha-entity-picker>
+            ${this._config.input_select_entity && this.hass?.states[this._config.input_select_entity] ? html`
+              <p class="help-text" style="margin-top: 8px;">
+                Options: ${(this.hass.states[this._config.input_select_entity].attributes?.options || []).join(', ')}
+              </p>
+            ` : ''}
+            <h3 style="margin-top: 16px;">Display Settings</h3>
             <ha-formfield label="Hide titles on inactive tabs">
                 <ha-switch 
                     .checked=${this._config.hide_inactive_tab_titles || false}
