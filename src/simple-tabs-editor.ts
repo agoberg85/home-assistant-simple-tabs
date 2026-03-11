@@ -14,6 +14,7 @@ declare global {
     'ha-formfield': HaFormField;
     'ha-switch': HaSwitch;
     'hui-card-element-editor': HuiCardElementEditor;
+    'hui-card-picker': HuiCardPicker;
     'ha-icon-button': HaIconButton;
   }
 }
@@ -64,6 +65,11 @@ interface HaIconButton extends HTMLElement {
   disabled: boolean;
 }
 
+interface HuiCardPicker extends HTMLElement {
+  hass?: HomeAssistant;
+  lovelace?: any;
+}
+
 function stringifyCard(card: LovelaceCardConfig | string | undefined): string {
   if (!card) {
     return '';  // Empty card
@@ -102,14 +108,38 @@ function stringifyCard(card: LovelaceCardConfig | string | undefined): string {
 @customElement('simple-tabs-editor')
 export class SimpleTabsEditor extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
+  @property({ attribute: false }) public lovelace?: any;
   @state() private _config?: TabsCardConfig;
   @state() private _helpers?: any;
   @state() private _collapsedCards: Set<string> = new Set();
+  @state() private _cardPickerTabIndex: number | null = null;
   private _initialized = false;
 
   public setConfig(config: TabsCardConfig): void {
     this._config = config;
     this._initialized = true;
+  }
+
+  protected async firstUpdated(): Promise<void> {
+    await this._loadHelpers();
+  }
+
+  private async _loadHelpers(): Promise<void> {
+    if (this._helpers) return;
+    this._helpers = await window.loadCardHelpers?.();
+    if (this._helpers) {
+      // Force lazy-load of hui-card-element-editor and hui-card-picker
+      this._helpers.createCardElement({ type: 'entity' });
+    }
+  }
+
+  private get _lovelaceConfig(): any {
+    return this.lovelace || {
+      config: { views: [] },
+      editMode: true,
+      enableStrategy: false,
+      saveConfig: async () => {},
+    };
   }
 
   private _valueChanged(newConfig: TabsCardConfig): void {
@@ -212,9 +242,27 @@ export class SimpleTabsEditor extends LitElement {
   }
 
   /**
-   * Add a new card to a multi-card tab
+   * Open the card picker for a tab
    */
   private _addCard(tabIndex: number): void {
+    this._cardPickerTabIndex = tabIndex;
+  }
+
+  /**
+   * Handle card selection from the card picker
+   */
+  private _handleCardPicked(ev: CustomEvent, tabIndex: number): void {
+    ev.stopPropagation();
+    const cardConfig = ev.detail.config;
+    if (!cardConfig || !this._config) return;
+    this._cardPickerTabIndex = null;
+    this._insertCard(tabIndex, cardConfig);
+  }
+
+  /**
+   * Insert a card into a tab (handles single-to-multi conversion)
+   */
+  private _insertCard(tabIndex: number, cardConfig: LovelaceCardConfig): void {
     if (!this._config) return;
 
     const newTabs = [...this._config.tabs];
@@ -222,30 +270,28 @@ export class SimpleTabsEditor extends LitElement {
 
     // If tab has single card, convert to multi-card format
     if ('card' in tab && tab.card) {
-      // SMART UNWRAPPING: Check if the single card is a container (vertical-stack or 1-column grid)
       const isContainer = tab.card.type === 'vertical-stack' ||
         (tab.card.type === 'grid' && (tab.card as any).columns === 1);
 
       let initialCards: LovelaceCardConfig[] = [tab.card];
 
       if (isContainer && (tab.card as any).cards) {
-        // Unwrap the container's cards
         initialCards = [...(tab.card as any).cards];
       }
 
       const multiCardTab: TabConfigMultiCard = {
         ...tab,
-        cards: [...initialCards, { type: 'markdown', content: 'New card content' }],
+        cards: [...initialCards, cardConfig],
         card: undefined
       };
       delete (multiCardTab as any).card;
       newTabs[tabIndex] = multiCardTab;
     }
-    // If already multi-card, just add new placeholder
+    // If already multi-card, just append
     else if ('cards' in tab) {
       newTabs[tabIndex] = {
         ...tab,
-        cards: [...tab.cards, { type: 'markdown', content: 'New card content' }]
+        cards: [...tab.cards, cardConfig]
       };
     }
 
@@ -331,6 +377,73 @@ export class SimpleTabsEditor extends LitElement {
     }
 
     this._valueChanged({ ...this._config, tabs: newTabs });
+  }
+
+  /**
+   * Handle config-changed from hui-card-element-editor
+   */
+  private _handleVisualCardChanged(
+    ev: CustomEvent,
+    tabIndex: number,
+    cardIndex: number | null
+  ): void {
+    ev.stopPropagation();
+    const newCardConfig = ev.detail.config;
+    if (!newCardConfig || !this._config) return;
+
+    if (cardIndex !== null) {
+      this._updateCard(tabIndex, cardIndex, newCardConfig);
+    } else {
+      const newTabs = [...this._config.tabs];
+      newTabs[tabIndex] = { ...newTabs[tabIndex], card: newCardConfig };
+      this._valueChanged({ ...this._config, tabs: newTabs });
+    }
+  }
+
+  /**
+   * Render a visual card editor (hui-card-element-editor) with YAML fallback
+   */
+  private _renderCardEditor(
+    card: LovelaceCardConfig,
+    tabIndex: number,
+    cardIndex: number | null,
+    isCollapsed: boolean
+  ): TemplateResult {
+    if (isCollapsed) {
+      return html``;
+    }
+
+    if (this._helpers) {
+      return html`
+        <hui-card-element-editor
+          .hass=${this.hass}
+          .value=${card}
+          .lovelace=${this._lovelaceConfig}
+          @config-changed=${(ev: CustomEvent) =>
+            this._handleVisualCardChanged(ev, tabIndex, cardIndex)}
+        ></hui-card-element-editor>
+      `;
+    }
+
+    // Fallback to YAML editor if helpers not loaded
+    return html`
+      <ha-yaml-editor
+        .hass=${this.hass}
+        .defaultValue=${stringifyCard(card)}
+        @value-changed=${(ev: Event) => {
+          const detail = (ev as CustomEvent).detail;
+          if (detail?.value && detail.isValid !== false) {
+            if (cardIndex !== null) {
+              this._updateCard(tabIndex, cardIndex, detail.value);
+            } else {
+              const newTabs = [...(this._config?.tabs || [])];
+              newTabs[tabIndex] = { ...newTabs[tabIndex], card: detail.value };
+              this._valueChanged({ ...this._config!, tabs: newTabs });
+            }
+          }
+        }}
+      ></ha-yaml-editor>
+    `;
   }
 
   private _moveTab(index: number, direction: 'up' | 'down'): void {
@@ -481,13 +594,13 @@ export class SimpleTabsEditor extends LitElement {
                     ></ha-textfield>
 
                     ${this._isMultiCardTab(tab) ? html`
-                      <!-- Multi-card mode: Show individual YAML editors for each card -->
+                      <!-- Multi-card mode: Show visual editors for each card -->
                       <h3 style="margin-top: 16px;">Tab Cards (${tab.cards.length})</h3>
                       ${tab.cards.map((card, cardIndex) => {
         const isCollapsed = this._collapsedCards.has(`${index}-${cardIndex}`);
         return html`
                         <div style="margin-bottom: 6px; padding: 6px; border: 1px solid var(--divider-color); border-radius: 8px; max-width: 100%; box-sizing: border-box; overflow: hidden;">
-                          <div 
+                          <div
                             style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; background: var(--secondary-background-color, rgba(0,0,0,0.05));"
                             @click=${() => this._toggleCardCollapse(index, cardIndex)}
                           >
@@ -527,43 +640,59 @@ export class SimpleTabsEditor extends LitElement {
                               <ha-icon .icon=${isCollapsed ? 'mdi:chevron-right' : 'mdi:chevron-down'}></ha-icon>
                             </div>
                           </div>
-                          <ha-yaml-editor
-                            .hass=${this.hass}
-                            .name=${'card-' + cardIndex}
-                            .defaultValue=${stringifyCard(card)}
-                            style=${isCollapsed ? 'display: none;' : ''}
-                            @value-changed=${(e: Event) => {
-            const detail = (e as CustomEvent).detail;
-            if (detail?.value && detail.isValid !== false) {
-              this._updateCard(index, cardIndex, detail.value);
-            }
-          }}
-                          ></ha-yaml-editor>
+                          ${this._renderCardEditor(card, index, cardIndex, isCollapsed)}
                         </div>
                       `;
       })}
-                      <button 
-                        @click=${() => this._addCard(index)}
-                        style="width: 100%; padding: 12px; background: var(--primary-color); color: var(--text-primary-color); border: none; border-radius: 8px; cursor: pointer; font-size: 14px; margin-top: 8px;"
-                      >
-                        + Add Another Card
-                      </button>
+                      ${this._cardPickerTabIndex === index ? html`
+                        <div class="card-picker-container">
+                          <hui-card-picker
+                            .hass=${this.hass}
+                            .lovelace=${this._lovelaceConfig}
+                            @config-changed=${(ev: CustomEvent) => this._handleCardPicked(ev, index)}
+                          ></hui-card-picker>
+                          <mwc-button
+                            @click=${() => { this._cardPickerTabIndex = null; }}
+                            style="width: 100%; margin-top: 8px;"
+                          >
+                            Cancel
+                          </mwc-button>
+                        </div>
+                      ` : html`
+                        <button
+                          @click=${() => this._addCard(index)}
+                          style="width: 100%; padding: 12px; background: var(--primary-color); color: var(--text-primary-color); border: none; border-radius: 8px; cursor: pointer; font-size: 14px; margin-top: 8px;"
+                        >
+                          + Add Another Card
+                        </button>
+                      `}
                     ` : html`
-                      <!-- Single card mode (legacy): Show single YAML editor with option to convert -->
+                      <!-- Single card mode: Show visual editor with option to add more -->
                       <div style="margin-top: 16px;">
                         <p>Card content:</p>
-                        <ha-yaml-editor
-                          .hass=${this.hass}
-                          .name=${'card'}
-                          .defaultValue=${stringifyCard(this._getTabCard(tab))}
-                          @value-changed=${(e: Event) => this._handleTabChange(e, index)}
-                        ></ha-yaml-editor>
-                        <button 
-                          @click=${() => this._addCard(index)}
-                          style="width: 100%; padding: 10px; background: var(--secondary-background-color); color: var(--primary-text-color); border: 1px solid var(--divider-color); border-radius: 8px; cursor: pointer; font-size: 14px; margin-top: 12px;"
-                        >
-                          + Add Another Card (Convert to Multi-Card)
-                        </button>
+                        ${this._renderCardEditor(tab.card, index, null, false)}
+                        ${this._cardPickerTabIndex === index ? html`
+                          <div class="card-picker-container">
+                            <hui-card-picker
+                              .hass=${this.hass}
+                              .lovelace=${this._lovelaceConfig}
+                              @config-changed=${(ev: CustomEvent) => this._handleCardPicked(ev, index)}
+                            ></hui-card-picker>
+                            <mwc-button
+                              @click=${() => { this._cardPickerTabIndex = null; }}
+                              style="width: 100%; margin-top: 8px;"
+                            >
+                              Cancel
+                            </mwc-button>
+                          </div>
+                        ` : html`
+                          <button
+                            @click=${() => this._addCard(index)}
+                            style="width: 100%; padding: 10px; background: var(--secondary-background-color); color: var(--primary-text-color); border: 1px solid var(--divider-color); border-radius: 8px; cursor: pointer; font-size: 14px; margin-top: 12px;"
+                          >
+                            + Add Another Card
+                          </button>
+                        `}
                       </div>
                     `}
                 </div>
@@ -649,6 +778,18 @@ export class SimpleTabsEditor extends LitElement {
     .reorder-btn[disabled] {
         opacity: 0.3;
         pointer-events: none;
+    }
+    .card-picker-container {
+        margin-top: 8px;
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        padding: 8px;
+        overflow: auto;
+        max-height: 400px;
+    }
+    hui-card-element-editor {
+        display: block;
+        margin-top: 8px;
     }
   `;
 }
