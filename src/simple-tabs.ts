@@ -264,6 +264,7 @@ export class SimpleTabs extends LitElement {
         tagName === 'swiper-container' ||
         tagName === 'css-swipe-card' ||
         tagName === 'swipe-card' ||
+        tagName === 'simple-swipe-card' ||
         classList.contains('slider') ||
         classList.contains('swiper') ||
         target.hasAttribute('data-no-swipe')
@@ -881,9 +882,15 @@ export class SimpleTabs extends LitElement {
       </div>
     `;
 
+    const animateClass = this._config.swipe_animation ? 'animate' : '';
+    const transitioningClass =
+      this._config.swipe_animation && this._transitionDirection !== 'none'
+        ? 'is-transitioning'
+        : '';
+
     const contentSection = html`
       <div 
-        class="content-container ${this._config.swipe_animation ? 'animate' : ''}" 
+        class="content-container ${animateClass} ${transitioningClass}" 
         @touchstart=${this._handleTouchStart}
         @touchmove=${this._handleTouchMove}
         @touchend=${this._handleTouchEnd}
@@ -919,8 +926,9 @@ export class SimpleTabs extends LitElement {
   static styles = css`
     :host { 
       display: block; 
-      /* OPTIMIZATION: Containment reduces browser layout work */
-      contain: content; 
+      /* Use 'style' containment only - 'content' or 'layout' containment breaks
+         nested cards (e.g. simple-swipe-card) that rely on ResizeObserver/auto-height */
+      contain: style; 
       margin-bottom: var(--simple-tabs-margin-bottom);
     }
     .card-container {
@@ -930,7 +938,9 @@ export class SimpleTabs extends LitElement {
       padding: var(--simple-tabs-container-padding, 0 0 12px 0);
       border-radius: var(--simple-tabs-container-rounding, 0);
       min-height: 50px; 
-      overflow: hidden;
+      /* overflow: visible allows nested cards (e.g. simple-swipe-card) to
+         expand to their natural height without being clipped */
+      overflow: visible;
     }
 
 
@@ -1056,7 +1066,10 @@ export class SimpleTabs extends LitElement {
     .content-container { 
       padding-top: 12px;
       position: relative;
-      overflow: hidden;
+      /* overflow: visible allows nested cards (e.g. simple-swipe-card) to 
+         expand to their natural height without being clipped */
+      overflow: visible;
+      min-width: 0;
       touch-action: pan-y; /* Allow vertical scrolling, we handle horizontal */
     }
     
@@ -1077,12 +1090,21 @@ export class SimpleTabs extends LitElement {
     .content-container.animate {
         display: grid;
         grid-template-areas: "content";
-        overflow: hidden;
+        /* Keep overflow visible in resting state to avoid clipping wide nested cards
+           (e.g. map-card/simple-swipe-card in Sections one-column layouts). */
+        overflow: visible;
+    }
+
+    .content-container.animate.is-transitioning {
+        /* Only clip horizontal overflow while tab panels actively slide. */
+        overflow-x: hidden;
+        overflow-y: visible;
     }
 
     .content-container.animate .tab-panel {
         grid-area: content;
         width: 100%;
+        min-width: 0;
         display: block; /* Override hidden behavior for transition */
     }
     
