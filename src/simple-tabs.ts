@@ -8,6 +8,7 @@ import type {
   LovelaceCardConfig,
   LovelaceCardEditor,
 } from 'custom-card-helpers';
+import { forwardHaptic } from 'custom-card-helpers';
 
 // --- CONFIG CHECKER ---
 function configChanged(oldConfig: TabsCardConfig | undefined, newConfig: TabsCardConfig): boolean {
@@ -129,8 +130,6 @@ export class SimpleTabs extends LitElement {
   private _hassSet = false;
   private _initialized = false;
   private _lastCheckedUrl = '';
-  private _cardId = Math.random().toString(36).substring(7);
-
   // Swipe gesture tracking
   private _touchStartX = 0;
   private _touchStartY = 0;
@@ -205,13 +204,41 @@ export class SimpleTabs extends LitElement {
 
   private _triggerHaptic(): void {
     if (!this._config?.haptic_feedback) return;
+
+    // Home Assistant listens for this event to provide platform-native haptics,
+    // including iOS environments where navigator.vibrate is typically unavailable.
+    forwardHaptic('selection');
+
     if ('vibrate' in navigator) {
       navigator.vibrate(10); // Light 10ms tap
     }
   }
 
+  private _getConfigFingerprint(): string {
+    if (!this._config?.tabs?.length) {
+      return 'default';
+    }
+
+    // Build a stable key from user-defined tab metadata instead of a random instance id.
+    const keySource = JSON.stringify(
+      this._config.tabs.map((tab, index) => ({
+        index,
+        id: tab.id ?? '',
+        title: tab.title ?? '',
+        icon: tab.icon ?? '',
+      }))
+    );
+
+    let hash = 0;
+    for (let i = 0; i < keySource.length; i += 1) {
+      hash = ((hash << 5) - hash + keySource.charCodeAt(i)) | 0;
+    }
+
+    return Math.abs(hash).toString(36);
+  }
+
   private _getStorageKey(): string {
-    const base = `simple-tabs-${this._cardId}-last-tab`;
+    const base = `simple-tabs-${this._getConfigFingerprint()}-last-tab`;
     if (this._config?.remember_tab === 'per_device') {
       // Include user agent or device info for per-device memory
       const deviceId = btoa(navigator.userAgent).substring(0, 10);
@@ -265,6 +292,8 @@ export class SimpleTabs extends LitElement {
         tagName === 'css-swipe-card' ||
         tagName === 'swipe-card' ||
         tagName === 'simple-swipe-card' ||
+        tagName === 'paper-buttons-row' ||
+        tagName === 'my-slider-v2' ||
         classList.contains('slider') ||
         classList.contains('swiper') ||
         target.hasAttribute('data-no-swipe')
@@ -947,9 +976,9 @@ export class SimpleTabs extends LitElement {
     .tabs-container {
       position: relative;
       overflow: hidden;
+      box-sizing: border-box;
+      width: 100%;
       padding: 0px 2px;
-      width: calc(100% + 40px);
-      margin-left: -14px;
       transform: translate3d(0,0,0);
       
       /* MASKING LOGIC FOR FADE EFFECT */
@@ -981,7 +1010,7 @@ export class SimpleTabs extends LitElement {
       gap: var(--simple-tabs-gap, 6px); 
       overflow-x: auto;
       overflow-y: hidden;
-      padding: 1px 0;
+      padding: 1px;
       background: transparent;
       border-radius: 0;
       scroll-behavior: smooth;
@@ -1034,9 +1063,6 @@ export class SimpleTabs extends LitElement {
       text-wrap: nowrap;
     }
 
-    .tab-button:first-of-type { margin-left: 14px; }
-    .tab-button:last-of-type { margin-right: 28px; }
-    
     .tab-button:not(.active) span:not(.badge) {
         display: var(--simple-tabs-inactive-title-display, inline);
     }
