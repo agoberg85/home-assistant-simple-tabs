@@ -140,17 +140,28 @@ export class SimpleTabsEditor extends LitElement {
     }
   }
 
+  private _cachedLovelaceConfig: any = null;
+  private _lastLovelace: any = undefined;
+
   private get _lovelaceConfig(): any {
-    return this.lovelace || {
-      config: { views: [] },
-      editMode: true,
-      enableStrategy: false,
-      saveConfig: async () => {},
-    };
+    if (this._lastLovelace !== this.lovelace) {
+      this._lastLovelace = this.lovelace;
+      this._cachedLovelaceConfig = this.lovelace || {
+        config: { views: [] },
+        editMode: true,
+        enableStrategy: false,
+        saveConfig: async () => {},
+      };
+    }
+    return this._cachedLovelaceConfig;
   }
 
+  private _debounceTimer?: number;
   private _valueChanged(newConfig: TabsCardConfig): void {
-    fireEvent(this, 'config-changed', { config: newConfig });
+    clearTimeout(this._debounceTimer);
+    this._debounceTimer = window.setTimeout(() => {
+      fireEvent(this, 'config-changed', { config: newConfig });
+    }, 300);
   }
 
   private _handleInputSelectChanged(ev: Event): void {
@@ -193,7 +204,12 @@ export class SimpleTabsEditor extends LitElement {
   private _handleSelectChange(ev: Event, field: string): void {
     if (!this._config) return;
     const target = ev.target as any;
-    this._valueChanged({ ...this._config, [field]: target.value });
+    let value: any = target.value;
+    if (field === 'remember_tab') {
+      if (value === 'true') value = true;
+      else if (value === 'false') value = false;
+    }
+    this._valueChanged({ ...this._config, [field]: value });
   }
 
   /**
@@ -458,8 +474,9 @@ export class SimpleTabsEditor extends LitElement {
   private _moveTab(index: number, direction: 'up' | 'down'): void {
     if (!this._config) return;
     const newTabs = [...this._config.tabs];
-    const [tab] = newTabs.splice(index, 1);
     const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= newTabs.length) return;
+    const [tab] = newTabs.splice(index, 1);
     newTabs.splice(newIndex, 0, tab);
     this._valueChanged({ ...this._config, tabs: newTabs });
   }

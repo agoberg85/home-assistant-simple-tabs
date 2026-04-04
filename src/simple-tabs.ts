@@ -25,9 +25,18 @@ function configChanged(oldConfig: TabsCardConfig | undefined, newConfig: TabsCar
       tab.icon !== newTab.icon ||
       tab.id !== newTab.id ||
       tab.badge !== newTab.badge ||
-      JSON.stringify(tab.card) !== JSON.stringify(tab.card) ||
-      JSON.stringify(tab.conditions) !== JSON.stringify(tab.conditions);
+      JSON.stringify(tab.card) !== JSON.stringify(newTab.card) ||
+      JSON.stringify(tab.conditions) !== JSON.stringify(newTab.conditions);
   });
+}
+
+function stableHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
 }
 
 // --- INTERFACES ---
@@ -93,6 +102,7 @@ export interface TabsCardConfig {
   remember_tab?: boolean | 'per_device';
   haptic_feedback?: boolean;
   input_select_entity?: string;
+  card_id?: string;
 }
 
 declare global {
@@ -131,7 +141,7 @@ export class SimpleTabs extends LitElement {
   private _hassSet = false;
   private _initialized = false;
   private _lastCheckedUrl = '';
-  private _cardId = Math.random().toString(36).substring(7);
+  private _cardId = '';
 
   // Swipe gesture tracking
   private _touchStartX = 0;
@@ -232,9 +242,9 @@ export class SimpleTabs extends LitElement {
 
   private _triggerHaptic(): void {
     if (!this._config?.haptic_feedback) return;
-    if ('vibrate' in navigator) {
-      navigator.vibrate(10); // Light 10ms tap
-    }
+    const event = new Event('haptic', { bubbles: false, composed: false });
+    (event as any).detail = 'light';
+    window.dispatchEvent(event);
   }
 
   private _getStorageKey(): string {
@@ -327,6 +337,9 @@ export class SimpleTabs extends LitElement {
       ...config
     };
 
+    this._cardId = this._config.card_id
+      || stableHash(this._config.tabs.map(t => t.title || '').join('|') + '|' + this._config.tabs.length);
+
     // Initialize Arrays
     const len = config.tabs.length;
     this._cards = new Array(len).fill(null);
@@ -367,6 +380,7 @@ export class SimpleTabs extends LitElement {
     tabs.forEach((tab, index) => {
       // Helper for state updates
       const updateState = (key: '_renderedTitles' | '_renderedIcons' | '_renderedBadges', value: any) => {
+        if (index >= this[key].length) return; // Guard against stale callbacks after config resize
         if (this[key][index] !== value) {
           const newArray = [...this[key]];
           newArray[index] = value;
@@ -487,7 +501,7 @@ export class SimpleTabs extends LitElement {
         if (!tab) return true; // input_select tabs without config are always visible
         if (tab.conditions) {
           return tab.conditions.every(c => {
-            if ('template' in c) return this._tabVisibility[i];
+            if ('template' in c) return i < this._tabVisibility.length ? this._tabVisibility[i] : true;
             return this._checkCondition(c);
           });
         }
@@ -1043,8 +1057,8 @@ export class SimpleTabs extends LitElement {
   static styles = css`
     :host { 
       display: block; 
-      /* OPTIMIZATION: Containment reduces browser layout work */
-      contain: content; 
+      /* OPTIMIZATION: Containment reduces browser layout work (layout+style only, no paint clipping) */
+      contain: layout style; 
       margin-bottom: var(--simple-tabs-margin-bottom);
     }
     .card-container {
