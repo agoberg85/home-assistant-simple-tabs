@@ -12,18 +12,21 @@ Subscribe to Youtube channel: https://www.youtube.com/@My_Smart_Home
 
 ## Features
 
-- **Organize Your Dashboard:** Group any Dashboard cards into a clean, tabbed interface.
-- **Tab Icons:** Add icon to your tab titles.
-- **Stylable:** Customize colors for the background, border, text, and active tab.
-- **Alignment:** Align your tabs to the start, center, or end of the card.
-- **Tab Positioning:** Choose to display tabs at the top or bottom of the card.
-- **Dynamic Defaults:** Change the default tab automatically based on your home's state (e.g., show "Remote" tab when TV is on).
-- **User Privacy:** Hide specific tabs from specific users (e.g., hide admin controls from guests).
-- **Conditional Tabs:** Dynamically show or hide tabs based on entity states or complex jinja templates.
-- **Performance:** Use the default "lazy-loading" for the best performance, or enable "pre-loading" for instantaneous tab switching.
-- **Mobile-Optimized:** Swipe between tabs with gesture support that intelligently avoids conflicts with sliders.
-- **Tab Memory:** Optionally remember your last selected tab across sessions (per-device or global).
-- **Haptic Feedback:** Optional vibration feedback on tab changes for mobile devices.
+- Organize any cards into a clean tabbed layout
+- Top or bottom tab positioning
+- Start/center/end tab alignment
+- Per-tab icon, title, badge template, and deep-link `id`
+- Dynamic tab visibility with `entity`, `template`, and `user` conditions
+- Dynamic default tab rules
+- Swipe navigation with smart conflict blocking for nested swipe/slider cards
+- Optional swipe animations
+- Optional tab memory (`false`, `true`, `per_device`)
+- Optional haptic feedback on supported devices
+- Extensive style options for tabs and container
+- Visual editor with:
+  - Card list management (move/edit/delete)
+  - Card picker for adding cards to a tab
+  - Per-card modal editing via Home Assistant card editor
 
 ## Installation
 
@@ -45,17 +48,30 @@ Subscribe to Youtube channel: https://www.youtube.com/@My_Smart_Home
     - URL: `/local/simple-tabs.js`
     - Resource Type: `JavaScript Module`
 
-## Multiple Cards
+## Quick Start
 
-You can now add multiple cards to a single tab without needing to manually wrap them in a `vertical-stack`.
+```yaml
+type: custom:simple-tabs
+tabs:
+  - title: Home
+    icon: mdi:home
+    card:
+      type: markdown
+      content: Home content
+  - title: Climate
+    icon: mdi:thermometer
+    card:
+      type: thermostat
+      entity: climate.living_room
+```
 
-### In Visual Editor (Hybrid Mode)
-1. Click the `+ Add Another Card` button at the bottom of any tab editor
-2. The tab will automatically convert to multi-card mode
-3. You can add as many cards as you like, each with its own YAML editor
+## Multiple Cards Per Tab
 
-### In YAML Configuration
-Instead of `card`, use `cards` (plural) which takes a list of card configurations:
+You can provide either:
+- `card` (single card)
+- `cards` (list of cards)
+
+When `cards` is used, Simple Tabs wraps them as a vertical stack automatically.
 
 ```yaml
 tabs:
@@ -68,7 +84,12 @@ tabs:
         entity: climate.living_room
 ```
 
-The card will automatically handle wrapping them in a vertical stack for you.
+## Visual Editor Notes
+
+- The editor now shows a card list for each tab.
+- Use the picker under the list to add cards.
+- Use the edit icon to open Home Assistant's native card editor modal for each card.
+- Manual YAML mode is still fully supported in dashboard YAML view.
 
 ## Configuration
 
@@ -81,6 +102,7 @@ The card will automatically handle wrapping them in a vertical stack for you.
 | `alignment` | string | Optional | Justification for the row of tabs. (`start`, `center`, `end`) | `'center'` |
 | `default_tab` | number/list | Optional | Defines the default tab. Can be a static number (1-based) or a list of conditional rules (see Advanced Configuration). | `1` |
 | `hide_inactive_tab_titles` | boolean | Optional | If `true`, hides the title text on tabs that are not currently active (showing only the icon). | `false` |
+| `show_fade` | boolean | Optional | Enable fade mask on tab row edges when horizontal scrolling is possible. | `true` |
 | `pre-load` | boolean | Optional | If `true`, renders all tab content on load for faster switching. | `false` |
 | `background-color`| string | Optional | CSS color for the button background. | `none` |
 | `border-color` | string | Optional | CSS color for the button border. | Your theme's `divider-color` |
@@ -95,6 +117,7 @@ The card will automatically handle wrapping them in a vertical stack for you.
 | `button_padding`| string | Optional | Padding inside each button | 12px |
 | `tab_position` | string | Optional | Position of tabs. (`top`, `bottom`) | `'top'` |
 | `enable_swipe` | boolean | Optional | Enable swipe gestures to switch tabs on mobile. | `true` |
+| `swipe_animation` | boolean | Optional | Enable animated transitions when switching tabs via swipe/click. | `true` |
 | `swipe_threshold` | number | Optional | Pixels of movement required to trigger a swipe. | `50` |
 | `remember_tab` | boolean/string | Optional | Remember last selected tab. (`false`, `true`, `'per_device'`) | `false` |
 | `haptic_feedback` | boolean | Optional | Vibration feedback on tab change (mobile only). | `false` |
@@ -107,13 +130,15 @@ Each entry in the `tabs` list is an object with the following properties:
 | :--- | :--- | :--- | :--- |
 | `title` | string | Optional* | The text to display on the tab. Can be jinja template |
 | `icon` | string | Optional* | An MDI icon to display next to the title (e.g., `mdi:lightbulb`). Can be jinja template |
-| `card` | object | **Required** | A standard Lovelace card configuration. |
+| `card` | object | Conditionally required | A standard Lovelace card configuration (single-card mode). |
+| `cards` | list | Conditionally required | List of Lovelace card configurations (multi-card mode). |
 | `conditions` | list | Optional | A list of conditions (`entity`, `template`, or `user`) that must be met to show the tab. |
 | `badge` | string | Optional* | Jinja template that outputs true/false |
 | `id`| string | Optional | ID of tab, for deeplinking | none |
 
 
-*Either title or icon has to be defined.
+*Either `title` or `icon` should be defined.
+*Use either `card` or `cards`.
 
 ## Advanced Configuration
 
@@ -135,9 +160,25 @@ default_tab:
     conditions:
       - entity: sun.sun
         state: 'below_horizon'
-  # 3. Fallback to Tab 1
-  - tab: 1
+	  # 3. Fallback to Tab 1
+	  - tab: 1
 ```
+
+### Deep Linking
+
+Set a tab `id` and open the dashboard URL with `#<id>`.
+
+```yaml
+tabs:
+  - title: Overview
+    id: overview
+    card:
+      type: markdown
+      content: Overview
+```
+
+URL example:
+`/dashboard-main/home#overview`
 
 ### User Visibility (Privacy)
 
@@ -152,7 +193,7 @@ tabs:
           - "8234982374982374982374"  # Dad
           - "1928371928371928371928"  # Mom
     card:
-       # ...
+	       # ...
 ```
 
 ## Example Usage
@@ -187,17 +228,17 @@ tabs:
     conditions:
       - user: "YOUR_ADMIN_ID_HERE"
     card:
-      type: markdown
-      content: Sensitive admin controls...
+	      type: markdown
+	      content: Sensitive admin controls...
 ```
 
-## Roadmap
+## Troubleshooting
 
-- **Visual Configuration Editor:** ✅ Basic UI editor available. Continuing to develop a more robust UI editor.
-- **More styling options:** ✅ Extensive styling options available. Continue adding more as requested.
-- **Tab positioning:** ✅ Completed - tabs can now be positioned at top or bottom.
-- **Touch navigation:** ✅ Completed - swipe gestures with smart conflict detection.
-- **Tab memory:** ✅ Completed - persistent tab selection with priority logic.
-- **Haptic feedback:** ✅ Completed - optional vibration on tab changes.
-- **Animations:** Add smooth transitions when switching between tabs.
-- **URL support:** ✅ Partially completed - tabs linkable via deep links (##tab-id). Full URL routing in progress.
+- If changes don't appear, hard refresh the browser/app cache after updating.
+- If gestures conflict with nested cards, keep `enable_swipe: true` and ensure nested components are recognized as swipe blockers (recent versions include major nested-swipe fixes).
+- For best performance on heavy dashboards, keep `pre-load: false` (default).
+
+## Changelog
+
+See releases:
+https://github.com/agoberg85/home-assistant-simple-tabs/releases

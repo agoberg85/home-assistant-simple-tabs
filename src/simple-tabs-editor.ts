@@ -60,6 +60,21 @@ interface HuiCardElementEditor extends HTMLElement {
   lovelace?: any;
 }
 
+interface HuiDialogEditCard extends HTMLElement {
+  hass?: HomeAssistant;
+  showDialog(params: {
+    cardConfig: LovelaceCardConfig;
+    lovelaceConfig?: any;
+    saveCardConfig: (config: LovelaceCardConfig) => void | Promise<LovelaceCardConfig | void>;
+  }): Promise<void>;
+}
+
+interface HuiCardPicker extends HTMLElement {
+  hass?: HomeAssistant;
+  lovelace?: any;
+  label?: string;
+}
+
 interface HaIconButton extends HTMLElement {
   path: string;
   label: string;
@@ -328,27 +343,11 @@ export class SimpleTabsEditor extends LitElement {
    */
   private _removeCard(tabIndex: number, cardIndex: number): void {
     if (!this._config) return;
-
-    const newTabs = [...this._config.tabs];
-    const tab = newTabs[tabIndex];
-
-    if ('cards' in tab && tab.cards) {
-      const newCards = tab.cards.filter((_, i) => i !== cardIndex);
-
-      // If only one card left, convert back to single-card format
-      if (newCards.length === 1) {
-        newTabs[tabIndex] = {
-          ...tab,
-          card: newCards[0],
-          cards: undefined
-        } as TabConfigSingleCard;
-        delete (newTabs[tabIndex] as any).cards;
-      } else {
-        newTabs[tabIndex] = { ...tab, cards: newCards };
-      }
-    }
-
-    this._valueChanged({ ...this._config, tabs: newTabs });
+    const tab = this._config.tabs[tabIndex];
+    const cards = this._getTabCards(tab);
+    if (cards.length <= 1) return;
+    cards.splice(cardIndex, 1);
+    this._setTabCards(tabIndex, cards);
   }
 
   /**
@@ -356,52 +355,104 @@ export class SimpleTabsEditor extends LitElement {
    */
   private _moveCard(tabIndex: number, cardIndex: number, direction: 'up' | 'down'): void {
     if (!this._config) return;
+    const tab = this._config.tabs[tabIndex];
+    const cards = this._getTabCards(tab);
+    const targetIndex = direction === 'up' ? cardIndex - 1 : cardIndex + 1;
 
-    const newTabs = [...this._config.tabs];
-    const tab = newTabs[tabIndex];
-
-    if ('cards' in tab && tab.cards) {
-      const newCards = [...tab.cards];
-      const targetIndex = direction === 'up' ? cardIndex - 1 : cardIndex + 1;
-
-      if (targetIndex >= 0 && targetIndex < newCards.length) {
-        [newCards[cardIndex], newCards[targetIndex]] = [newCards[targetIndex], newCards[cardIndex]];
-        newTabs[tabIndex] = { ...tab, cards: newCards };
-        this._valueChanged({ ...this._config, tabs: newTabs });
-      }
+    if (targetIndex >= 0 && targetIndex < cards.length) {
+      [cards[cardIndex], cards[targetIndex]] = [cards[targetIndex], cards[cardIndex]];
+      this._setTabCards(tabIndex, cards);
     }
   }
 
-  /**
-   * Toggle card collapse state
-   */
-  private _toggleCardCollapse(tabIndex: number, cardIndex: number): void {
-    const key = `${tabIndex}-${cardIndex}`;
-    const newCollapsed = new Set(this._collapsedCards);
-    if (newCollapsed.has(key)) {
-      newCollapsed.delete(key);
-    } else {
-      newCollapsed.add(key);
+  private async _openCardEditor(tabIndex: number, cardIndex?: number): Promise<void> {
+    if (!this._config || !this.hass) return;
+
+    const tab = this._config.tabs[tabIndex];
+    let currentCard: LovelaceCardConfig | undefined;
+
+    if (typeof cardIndex === 'number' && 'cards' in tab && Array.isArray(tab.cards)) {
+      currentCard = tab.cards[cardIndex];
+    } else if ('card' in tab && tab.card) {
+      currentCard = tab.card;
     }
-    this._collapsedCards = newCollapsed;
+
+    if (!currentCard) return;
+
+    try {
+      await customElements.whenDefined('hui-dialog-edit-card');
+      const dialog = document.createElement('hui-dialog-edit-card') as HuiDialogEditCard;
+      dialog.hass = this.hass;
+      document.body.appendChild(dialog);
+
+      const cleanup = (): void => {
+        dialog.removeEventListener('dialog-closed', cleanup as EventListener);
+        if (dialog.parentNode === document.body) {
+          document.body.removeChild(dialog);
+        }
+      };
+      dialog.addEventListener('dialog-closed', cleanup as EventListener, { once: true });
+
+      await dialog.showDialog({
+        cardConfig: currentCard,
+        lovelaceConfig: (this as any).lovelace,
+        saveCardConfig: (updatedCard: LovelaceCardConfig) => {
+          if (!this._config) return;
+          if (!updatedCard) return;
+          const newTabs = [...this._config.tabs];
+          const editableTab = newTabs[tabIndex];
+
+          if (typeof cardIndex === 'number' && 'cards' in editableTab && Array.isArray(editableTab.cards)) {
+            const newCards = [...editableTab.cards];
+            newCards[cardIndex] = updatedCard;
+            const multiCardTab: TabConfigMultiCard = {
+              ...editableTab,
+              cards: newCards,
+              card: undefined
+            } as TabConfigMultiCard;
+            delete (multiCardTab as any).card;
+            newTabs[tabIndex] = multiCardTab;
+          } else {
+            const singleTab: TabConfigSingleCard = {
+              ...editableTab,
+              card: updatedCard,
+              cards: undefined
+            } as TabConfigSingleCard;
+            delete (singleTab as any).cards;
+            newTabs[tabIndex] = singleTab;
+          }
+
+          this._valueChanged({ ...this._config, tabs: newTabs });
+        }
+      });
+    } catch (e) {
+      console.error('[Simple Tabs Editor] Failed to open visual card editor:', e);
+    }
   }
 
-  /**
-   * Update a card within a multi-card tab
-   */
-  private _updateCard(tabIndex: number, cardIndex: number, cardConfig: LovelaceCardConfig): void {
+  private _handleCardPicked(ev: Event, tabIndex: number): void {
     if (!this._config) return;
+    ev.stopPropagation();
+    const detail = (ev as CustomEvent).detail;
+    const pickedCard = detail?.config as LovelaceCardConfig | undefined;
+    if (!pickedCard || typeof pickedCard !== 'object') return;
 
-    const newTabs = [...this._config.tabs];
-    const tab = newTabs[tabIndex];
+    const cards = this._getTabCards(this._config.tabs[tabIndex]);
+    cards.push(pickedCard);
+    this._setTabCards(tabIndex, cards);
+    this._openCardPickers = this._openCardPickers.filter(index => index !== tabIndex);
+  }
 
-    if ('cards' in tab && tab.cards) {
-      const newCards = [...tab.cards];
-      newCards[cardIndex] = cardConfig;
-      newTabs[tabIndex] = { ...tab, cards: newCards };
-    }
+  private _cardTypeLabel(card: LovelaceCardConfig): string {
+    const type = card.type || 'Unknown';
+    const clean = type.replace(/^custom:/, '').replace(/-/g, ' ');
+    return clean.charAt(0).toUpperCase() + clean.slice(1);
+  }
 
-    this._valueChanged({ ...this._config, tabs: newTabs });
+  private _toggleCardPicker(tabIndex: number): void {
+    this._openCardPickers = this._openCardPickers.includes(tabIndex)
+      ? this._openCardPickers.filter(index => index !== tabIndex)
+      : [tabIndex];
   }
 
   /**
@@ -728,9 +779,47 @@ export class SimpleTabsEditor extends LitElement {
     }
     .global-options {
         margin-bottom: 24px;
-        padding: 8px;
+        padding: 14px;
         border: 1px solid var(--divider-color);
-        border-radius: 4px;
+        border-radius: 12px;
+        background: var(--ha-card-background, rgba(0,0,0,0.12));
+    }
+    .settings-title {
+      margin: 0 0 10px 0;
+      font-size: 1.1rem;
+      font-weight: 500;
+    }
+    .behavior-title {
+      margin-top: 18px;
+    }
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 44px;
+      padding: 0 2px;
+      border-bottom: 1px solid color-mix(in srgb, var(--divider-color) 70%, transparent 30%);
+    }
+    .setting-row:last-of-type {
+      border-bottom: none;
+    }
+    .select-group {
+      display: grid;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .select-label {
+      font-size: 0.95rem;
+      color: var(--secondary-text-color);
+    }
+    .ha-like-select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--divider-color);
+      color: var(--primary-text-color);
+      background: color-mix(in srgb, var(--card-background-color, var(--ha-card-background, #1f1f1f)) 88%, black 12%);
+      font: inherit;
     }
     .tabs-list {
       display: flex;
@@ -771,6 +860,38 @@ export class SimpleTabsEditor extends LitElement {
       gap: 16px;
       overflow: auto;
       margin: 16px;
+    }
+    .card-list-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      padding: 8px 12px;
+      border-radius: 20px;
+      background: var(--ha-card-background, rgba(0,0,0,0.16));
+      border: 1px solid var(--divider-color);
+    }
+    .card-picker-shell {
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 16px;
+      background: color-mix(in srgb, var(--card-background-color, var(--ha-card-background, #1f1f1f)) 84%, black 16%);
+      border: 1px solid var(--divider-color);
+    }
+    .picker-toggle-btn {
+      width: 100%;
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--divider-color);
+      background: var(--ha-card-background, rgba(0, 0, 0, 0.16));
+      color: var(--primary-text-color);
+      font: inherit;
+      cursor: pointer;
+      text-align: center;
+    }
+    .card-picker-shell hui-card-picker {
+      --ha-card-border-radius: 16px;
     }
     .tab-settings-row {
         display: grid;
