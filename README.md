@@ -18,7 +18,7 @@ Subscribe to Youtube channel: https://www.youtube.com/@My_Smart_Home
 - Per-tab icon, title, badge template, and deep-link `id`
 - Dynamic tab visibility with `entity`, `template`, and `user` conditions
 - Dynamic default tab rules
-- Swipe navigation with smart conflict blocking for nested swipe/slider cards
+- Swipe navigation with automatic nested horizontal-scroll detection
 - Optional swipe animations
 - Optional tab memory (`false`, `true`, `per_device`)
 - Optional haptic feedback on supported devices
@@ -235,7 +235,8 @@ tabs:
 ## Troubleshooting
 
 - If changes don't appear, hard refresh the browser/app cache after updating.
-- If gestures conflict with nested cards, keep `enable_swipe: true` and ensure nested components are recognized as swipe blockers (recent versions include major nested-swipe fixes).
+- Nested sliders/carousels and horizontally scrollable content are detected automatically, so they should keep working without card-specific whitelists.
+- If a custom element still needs to opt out, add `data-no-swipe` on the element that receives the touch gesture.
 - For best performance on heavy dashboards, keep `pre-load: false` (default).
 
 ## Changelog

@@ -135,6 +135,7 @@ export class SimpleTabs extends LitElement {
   private _touchStartY = 0;
   private _touchStartTime = 0;
   private _isSwiping = false;
+  private _blockSwipeForGesture = false;
 
   static async getConfigElement(): Promise<LovelaceCardEditor> {
     return document.createElement('simple-tabs-editor') as LovelaceCardEditor;
@@ -272,7 +273,49 @@ export class SimpleTabs extends LitElement {
     return null;
   }
 
-  private _shouldBlockSwipe(e: TouchEvent): boolean {
+  private _isFormControl(target: HTMLElement): boolean {
+    const tagName = target.tagName.toLowerCase();
+    return (
+      tagName === 'input' ||
+      tagName === 'textarea' ||
+      tagName === 'select' ||
+      target.isContentEditable
+    );
+  }
+
+  private _hasHorizontalScroll(target: HTMLElement): boolean {
+    const style = window.getComputedStyle(target);
+    const overflowX = style.overflowX;
+    const canOverflow =
+      overflowX === 'auto' ||
+      overflowX === 'scroll' ||
+      overflowX === 'overlay' ||
+      (overflowX === 'hidden' && target.scrollWidth > target.clientWidth + 1);
+
+    return canOverflow && target.scrollWidth > target.clientWidth + 1;
+  }
+
+  private _canTargetConsumeHorizontalSwipe(target: HTMLElement, deltaX: number): boolean {
+    if (!this._hasHorizontalScroll(target)) return false;
+
+    const maxScrollLeft = target.scrollWidth - target.clientWidth;
+    if (maxScrollLeft <= 0) return false;
+
+    const scrollBuffer = 1;
+
+    // Finger moving left means nested content would need room to scroll right.
+    if (deltaX < 0) {
+      return target.scrollLeft < maxScrollLeft - scrollBuffer;
+    }
+
+    if (deltaX > 0) {
+      return target.scrollLeft > scrollBuffer;
+    }
+
+    return false;
+  }
+
+  private _shouldAlwaysBlockSwipe(e: TouchEvent): boolean {
     const path = e.composedPath();
 
     for (const target of path) {
@@ -285,15 +328,9 @@ export class SimpleTabs extends LitElement {
       const classList = target.classList;
 
       if (
-        tagName === 'input' ||
+        this._isFormControl(target) ||
         tagName === 'ha-slider' ||
         tagName === 'mwc-slider' ||
-        tagName === 'swiper-container' ||
-        tagName === 'css-swipe-card' ||
-        tagName === 'swipe-card' ||
-        tagName === 'simple-swipe-card' ||
-        tagName === 'paper-buttons-row' ||
-        tagName === 'my-slider-v2' ||
         classList.contains('slider') ||
         classList.contains('swiper') ||
         target.hasAttribute('data-no-swipe')
@@ -301,6 +338,22 @@ export class SimpleTabs extends LitElement {
         return true;
       }
     }
+    return false;
+  }
+
+  private _shouldYieldToNestedHorizontalScroll(e: TouchEvent, deltaX: number): boolean {
+    const path = e.composedPath();
+
+    for (const target of path) {
+      if (!(target instanceof HTMLElement)) continue;
+
+      if (target === this._contentEl) break;
+
+      if (this._canTargetConsumeHorizontalSwipe(target, deltaX)) {
+        return true;
+      }
+    }
+
     return false;
   }
 
@@ -775,17 +828,18 @@ export class SimpleTabs extends LitElement {
 
   private _handleTouchStart = (e: TouchEvent): void => {
     if (!this._config?.enable_swipe) return;
-    if (this._shouldBlockSwipe(e)) return;
 
     const touch = e.touches[0];
     this._touchStartX = touch.clientX;
     this._touchStartY = touch.clientY;
     this._touchStartTime = Date.now();
     this._isSwiping = false;
+    this._blockSwipeForGesture = this._shouldAlwaysBlockSwipe(e);
   };
 
   private _handleTouchMove = (e: TouchEvent): void => {
     if (!this._config?.enable_swipe || !this._touchStartX) return;
+    if (this._blockSwipeForGesture) return;
 
     const touch = e.touches[0];
     const deltaX = touch.clientX - this._touchStartX;
@@ -793,6 +847,10 @@ export class SimpleTabs extends LitElement {
 
     // Detect swipe intent: horizontal movement must dominate
     if (Math.abs(deltaX) > Math.abs(deltaY) * 2 && Math.abs(deltaX) > 10) {
+      if (this._shouldYieldToNestedHorizontalScroll(e, deltaX)) {
+        return;
+      }
+
       this._isSwiping = true;
       // Prevent scroll when swiping horizontally
       e.preventDefault();
@@ -804,6 +862,7 @@ export class SimpleTabs extends LitElement {
       this._touchStartX = 0;
       this._touchStartY = 0;
       this._isSwiping = false;
+      this._blockSwipeForGesture = false;
       return;
     }
 
@@ -817,6 +876,7 @@ export class SimpleTabs extends LitElement {
     this._touchStartX = 0;
     this._touchStartY = 0;
     this._isSwiping = false;
+    this._blockSwipeForGesture = false;
 
     // Check if swipe meets criteria
     if (Math.abs(deltaX) < threshold || deltaTime > 500) return;
