@@ -1,10 +1,18 @@
 {
   "name": "simple-tabs-card",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "A simple, configurable tabs card for Home Assistant.",
   "main": "dist/simple-tabs.js",
   "module": "dist/simple-tabs.js",
-  "author": "Your Name",
+  "homepage": "https://github.com/agoberg85/home-assistant-simple-tabs",
+  "bugs": {
+    "url": "https://github.com/agoberg85/home-assistant-simple-tabs/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agoberg85/home-assistant-simple-tabs.git"
+  },
+  "author": "agoberg85",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -12,6 +20,12 @@
     "build": "rollup -c",
     "lint": "eslint src/*.ts"
   },
+  "keywords": [
+    "home-assistant",
+    "lovelace",
+    "tabs",
+    "custom-card"
+  ],
   "dependencies": {
     "custom-card-helpers": "^1.9.0",
     "home-assistant-js-websocket": "^9.0.0",

@@ -9,7 +9,7 @@ declare global {
   interface HTMLElementTagNameMap {
     'ha-yaml-editor': HaYamlEditor;
     'ha-icon-picker': HaIconPicker;
-    'ha-textfield': HaTextField;
+    'ha-input': HaInput;
     'ha-expansion-panel': HaExpansionPanel;
     'ha-formfield': HaFormField;
     'ha-switch': HaSwitch;
@@ -34,7 +34,7 @@ interface HaIconPicker extends HTMLElement {
   name: string;
 }
 
-interface HaTextField extends HTMLElement {
+interface HaInput extends HTMLElement {
   value: string;
   label: string;
   name: string;
@@ -185,7 +185,7 @@ export class SimpleTabsEditor extends LitElement {
   private _handleTabChange(ev: Event, index: number): void {
     if (!this._config) return;
 
-    const target = ev.target as (HaTextField | HaYamlEditor | HaIconPicker);
+    const target = ev.target as (HaInput | HaYamlEditor | HaIconPicker);
     const newTabs = [...this._config.tabs];
     let value: string | object;
 
@@ -491,7 +491,7 @@ export class SimpleTabsEditor extends LitElement {
       }}
                         ></ha-icon>
                     </div>
-                    <ha-textfield
+                    <ha-input
                         class="summary-title"
                         .name=${'title'}
                         .value=${tab.title || ''}
@@ -499,7 +499,7 @@ export class SimpleTabsEditor extends LitElement {
                         @input=${(e: Event) => this._handleTabChange(e, index)}
                         @click=${(e: Event) => e.stopPropagation()}
                         @keydown=${(e: KeyboardEvent) => e.stopPropagation()}
-                    ></ha-textfield>
+                    ></ha-input>
                     <ha-icon
                         class="remove-icon"
                         icon="mdi:delete"
@@ -519,20 +519,20 @@ export class SimpleTabsEditor extends LitElement {
                             .name=${'icon'}
                             @value-changed=${(e: Event) => this._handleTabChange(e, index)}
                         ></ha-icon-picker>
-                        <ha-textfield
+                        <ha-input
                             .label=${'Tab ID (for deep linking)'}
                             .value=${tab.id || ''}
                             .name=${'id'}
                             @input=${(e: Event) => this._handleTabChange(e, index)}
-                        ></ha-textfield>
+                        ></ha-input>
                     </div>
-                    <ha-textfield
+                    <ha-input
                         .label=${'Badge Template (Jinja)'}
                         .value=${tab.badge || ''}
                         .name=${'badge'}
                         placeholder="{{ is_state('light.kitchen', 'on') }}"
                         @input=${(e: Event) => this._handleTabChange(e, index)}
-                    ></ha-textfield>
+                    ></ha-input>
 
                     <div style="margin-top: 16px;">
                       <h3 style="margin: 0 0 12px 0;">Cards</h3>
