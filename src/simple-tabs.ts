@@ -95,6 +95,7 @@ export interface TabsCardConfig {
   tab_position?: 'top' | 'bottom';
   enable_swipe?: boolean;
   swipe_animation?: boolean;
+  tab_click_animation?: boolean;
   swipe_threshold?: number;
   remember_tab?: boolean | 'per_device';
   haptic_feedback?: boolean;
@@ -384,6 +385,7 @@ export class SimpleTabs extends LitElement {
       tab_position: 'top',
       enable_swipe: true,
       swipe_animation: true,
+      tab_click_animation: config.tab_click_animation ?? config.swipe_animation ?? true,
       swipe_threshold: 50,
       remember_tab: false,
       haptic_feedback: false,
@@ -427,8 +429,15 @@ export class SimpleTabs extends LitElement {
     return tab.badge_display ?? 'dot';
   }
 
-  private _shouldAnimateTransitions(): boolean {
-    return !!this._config?.enable_swipe && !!this._config?.swipe_animation;
+  private _shouldAnimateTransitions(trigger: 'swipe' | 'click'): boolean {
+    if (trigger === 'swipe') {
+      return !!this._config?.enable_swipe && !!this._config?.swipe_animation;
+    }
+    return !!this._config?.tab_click_animation;
+  }
+
+  private _hasAnimatedTransitionsEnabled(): boolean {
+    return !!this._config?.tab_click_animation || (!!this._config?.enable_swipe && !!this._config?.swipe_animation);
   }
 
   private _isTruthyTemplateResult(result: unknown): boolean {
@@ -969,14 +978,14 @@ export class SimpleTabs extends LitElement {
     }
 
     if (newIndex !== currentIndex) {
-      this._selectTab(this._visibleIndices[newIndex], true); // User-initiated
+      this._selectTab(this._visibleIndices[newIndex], true, 'swipe'); // User-initiated
     }
   };
 
-  private _selectTab(index: number, userInitiated = false): void {
+  private _selectTab(index: number, userInitiated = false, trigger: 'swipe' | 'click' | 'programmatic' = 'programmatic'): void {
     if (index === this._selectedTabIndex) return;
 
-    if (this._shouldAnimateTransitions()) {
+    if (trigger !== 'programmatic' && this._shouldAnimateTransitions(trigger)) {
       // Calculate direction
       // If wrapping support is added later, logic needs update. For now simple index comparison.
       // RTL support might invert this logic visually.
@@ -1040,7 +1049,7 @@ export class SimpleTabs extends LitElement {
           ${this._visibleIndices.map(originalIndex => html`
             <button
               class="tab-button ${originalIndex === this._selectedTabIndex ? 'active' : ''}"
-              @click=${() => this._selectTab(originalIndex, true)}
+              @click=${() => this._selectTab(originalIndex, true, 'click')}
             >
               ${this._renderedIcons[originalIndex] ? html`<ha-icon .icon=${this._renderedIcons[originalIndex]}></ha-icon>` : ''}
               ${this._renderedTitles[originalIndex] ? html`<span>${this._renderedTitles[originalIndex]}</span>` : ''}
@@ -1055,7 +1064,7 @@ export class SimpleTabs extends LitElement {
       </div>
     `;
 
-    const shouldAnimateTransitions = this._shouldAnimateTransitions();
+    const shouldAnimateTransitions = this._hasAnimatedTransitionsEnabled();
     const animateClass = shouldAnimateTransitions ? 'animate' : '';
     const transitioningClass =
       shouldAnimateTransitions && this._transitionDirection !== 'none'

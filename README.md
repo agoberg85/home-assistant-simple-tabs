@@ -117,7 +117,8 @@ tabs:
 | `button_padding`| string | Optional | Padding inside each button | 12px |
 | `tab_position` | string | Optional | Position of tabs. (`top`, `bottom`) | `'top'` |
 | `enable_swipe` | boolean | Optional | Enable swipe gestures to switch tabs on mobile. | `true` |
-| `swipe_animation` | boolean | Optional | Enable animated transitions when switching tabs via swipe/click. | `true` |
+| `swipe_animation` | boolean | Optional | Enable animated transitions for swipe gestures. | `true` |
+| `tab_click_animation` | boolean | Optional | Enable animated transitions when changing tabs by clicking the tab buttons. | `true` |
 | `swipe_threshold` | number | Optional | Pixels of movement required to trigger a swipe. | `50` |
 | `remember_tab` | boolean/string | Optional | Remember last selected tab. (`false`, `true`, `'per_device'`) | `false` |
 | `haptic_feedback` | boolean | Optional | Vibration feedback on tab change (mobile only). | `false` |

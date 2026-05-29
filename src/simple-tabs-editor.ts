@@ -155,6 +155,18 @@ export class SimpleTabsEditor extends LitElement {
     this._valueChanged({ ...this._config, enable_swipe: target.checked });
   }
 
+  private _toggleSwipeAnimation(ev: Event): void {
+    if (!this._config) return;
+    const target = ev.target as HaSwitch;
+    this._valueChanged({ ...this._config, swipe_animation: target.checked });
+  }
+
+  private _toggleTabClickAnimation(ev: Event): void {
+    if (!this._config) return;
+    const target = ev.target as HaSwitch;
+    this._valueChanged({ ...this._config, tab_click_animation: target.checked });
+  }
+
   private _toggleHaptic(ev: Event): void {
     if (!this._config) return;
     const target = ev.target as HaSwitch;
@@ -498,6 +510,20 @@ export class SimpleTabsEditor extends LitElement {
               <ha-switch 
                   .checked=${this._config.enable_swipe ?? true}
                   @change=${this._toggleEnableSwipe}
+              ></ha-switch>
+            </div>
+            <div class="setting-row">
+              <span>Animate swipe gestures</span>
+              <ha-switch 
+                  .checked=${this._config.swipe_animation ?? true}
+                  @change=${this._toggleSwipeAnimation}
+              ></ha-switch>
+            </div>
+            <div class="setting-row">
+              <span>Animate tab clicks</span>
+              <ha-switch 
+                  .checked=${this._config.tab_click_animation ?? this._config.swipe_animation ?? true}
+                  @change=${this._toggleTabClickAnimation}
               ></ha-switch>
             </div>
             <div class="setting-row">
