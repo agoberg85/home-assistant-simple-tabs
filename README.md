@@ -15,7 +15,7 @@ Subscribe to Youtube channel: https://www.youtube.com/@My_Smart_Home
 - Organize any cards into a clean tabbed layout
 - Top or bottom tab positioning
 - Start/center/end tab alignment
-- Per-tab icon, title, badge template, and deep-link `id`
+- Per-tab icon, title, badge rules, badge display mode, and deep-link `id`
 - Dynamic tab visibility with `entity`, `template`, and `user` conditions
 - Dynamic default tab rules
 - Swipe navigation with automatic nested horizontal-scroll detection
@@ -133,12 +133,50 @@ Each entry in the `tabs` list is an object with the following properties:
 | `card` | object | Conditionally required | A standard Lovelace card configuration (single-card mode). |
 | `cards` | list | Conditionally required | List of Lovelace card configurations (multi-card mode). |
 | `conditions` | list | Optional | A list of conditions (`entity`, `template`, or `user`) that must be met to show the tab. |
-| `badge` | string | Optional* | Jinja template that outputs true/false |
+| `badge` | string | Optional* | Legacy single Jinja template that outputs true/false |
+| `badge_templates` | list | Optional | List of Jinja templates. If any evaluate truthy, the badge is shown. |
+| `badge_display` | string | Optional | Badge display mode: `dot`, `count`, or `exclamation`. |
 | `id`| string | Optional | ID of tab, for deeplinking | none |
 
 
 *Either `title` or `icon` should be defined.
 *Use either `card` or `cards`.
+
+### Badge Configuration
+
+Badges can be configured in two ways:
+
+- `badge`: a legacy single Jinja template that shows the badge when the result is truthy.
+- `badge_templates`: a list of Jinja templates. If any of them evaluate truthy, the badge is shown.
+- `badge_display`: controls the badge style. Use `dot`, `count`, or `exclamation`.
+
+A result is treated as truthy when it returns values such as `true`, `on`, or a number greater than `0`.
+
+Example with a single badge rule:
+
+```yaml
+tabs:
+  - title: Kitchen
+    badge: "{{ is_state('light.kitchen', 'on') }}"
+    card:
+      type: markdown
+      content: Kitchen
+```
+
+Example with multiple badge rules and a counted badge:
+
+```yaml
+tabs:
+  - title: Alerts
+    badge_display: count
+    badge_templates:
+      - "{{ is_state('binary_sensor.front_door', 'on') }}"
+      - "{{ is_state('binary_sensor.back_door', 'on') }}"
+      - "{{ states('sensor.unread_notifications') | int > 0 }}"
+    card:
+      type: markdown
+      content: Alerts overview
+```
 
 ## Advanced Configuration
 
@@ -243,3 +281,7 @@ tabs:
 
 See releases:
 https://github.com/agoberg85/home-assistant-simple-tabs/releases
+
+## Use Of AI
+
+I am a frontend developer and have used AI tools to help build some of the functionality of this custom dashboard card. All features have been heavily tested on the various devices I have available.

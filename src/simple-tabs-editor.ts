@@ -1,7 +1,7 @@
 import { LitElement, html, css, TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { fireEvent, HomeAssistant } from 'custom-card-helpers';
-import { TabsCardConfig, TabConfig, TabConfigSingleCard, TabConfigMultiCard } from './simple-tabs';
+import { BadgeDisplay, TabsCardConfig, TabConfig, TabConfigSingleCard, TabConfigMultiCard } from './simple-tabs';
 import { LovelaceCardConfig } from 'custom-card-helpers/dist/types';
 import * as yaml from 'js-yaml';
 
@@ -237,6 +237,59 @@ export class SimpleTabsEditor extends LitElement {
       return [...tab.cards];
     }
     return tab.card ? [tab.card] : [];
+  }
+
+  private _getBadgeTemplates(tab: TabConfig): string[] {
+    if (Array.isArray(tab.badge_templates) && tab.badge_templates.length > 0) {
+      return tab.badge_templates;
+    }
+    return tab.badge ? [tab.badge] : [];
+  }
+
+  private _setBadgeConfig(tabIndex: number, updates: { badge_templates?: string[]; badge_display?: BadgeDisplay }): void {
+    if (!this._config) return;
+
+    const newTabs = [...this._config.tabs];
+    const existingBadgeTemplates = this._getBadgeTemplates(newTabs[tabIndex]);
+    const updatedTab = {
+      ...newTabs[tabIndex],
+      badge_templates: updates.badge_templates ?? existingBadgeTemplates,
+      badge_display: updates.badge_display ?? newTabs[tabIndex].badge_display,
+      badge: undefined
+    } as TabConfig & { badge?: string };
+
+    delete updatedTab.badge;
+    if (!updatedTab.badge_templates?.length) {
+      delete updatedTab.badge_templates;
+    }
+    if (!updatedTab.badge_display) {
+      delete updatedTab.badge_display;
+    }
+
+    newTabs[tabIndex] = updatedTab;
+    this._valueChanged({ ...this._config, tabs: newTabs });
+  }
+
+  private _handleBadgeTemplateChange(ev: Event, tabIndex: number, badgeIndex: number): void {
+    const target = ev.target as HaInput;
+    const badgeTemplates = [...this._getBadgeTemplates(this._config!.tabs[tabIndex])];
+    badgeTemplates[badgeIndex] = target.value;
+    this._setBadgeConfig(tabIndex, { badge_templates: badgeTemplates });
+  }
+
+  private _addBadgeTemplate(tabIndex: number): void {
+    const badgeTemplates = [...this._getBadgeTemplates(this._config!.tabs[tabIndex]), ''];
+    this._setBadgeConfig(tabIndex, { badge_templates: badgeTemplates });
+  }
+
+  private _removeBadgeTemplate(tabIndex: number, badgeIndex: number): void {
+    const badgeTemplates = this._getBadgeTemplates(this._config!.tabs[tabIndex]).filter((_, index) => index !== badgeIndex);
+    this._setBadgeConfig(tabIndex, { badge_templates: badgeTemplates });
+  }
+
+  private _handleBadgeDisplayChange(ev: Event, tabIndex: number): void {
+    const target = ev.target as HTMLSelectElement;
+    this._setBadgeConfig(tabIndex, { badge_display: target.value as BadgeDisplay });
   }
 
   private _setTabCards(tabIndex: number, cards: LovelaceCardConfig[]): void {
@@ -529,13 +582,46 @@ export class SimpleTabsEditor extends LitElement {
                             @input=${(e: Event) => this._handleTabChange(e, index)}
                         ></ha-input>
                     </div>
-                    <ha-input
-                        .label=${'Badge Template (Jinja)'}
-                        .value=${tab.badge || ''}
-                        .name=${'badge'}
-                        placeholder="{{ is_state('light.kitchen', 'on') }}"
-                        @input=${(e: Event) => this._handleTabChange(e, index)}
-                    ></ha-input>
+                    <div class="badge-settings">
+                      <div class="badge-settings-header">
+                        <h3>Badge</h3>
+                        <button
+                          class="secondary-btn"
+                          type="button"
+                          @click=${() => this._addBadgeTemplate(index)}
+                        >Add Badge Rule</button>
+                      </div>
+                      <div class="select-group badge-display-group">
+                        <label class="select-label">Badge Display</label>
+                        <select
+                          class="ha-like-select"
+                          .value=${tab.badge_display || 'dot'}
+                          @change=${(e: Event) => this._handleBadgeDisplayChange(e, index)}
+                        >
+                          <option value="dot">Dot</option>
+                          <option value="count">Count True Rules</option>
+                          <option value="exclamation">Exclamation Mark</option>
+                        </select>
+                      </div>
+                      ${this._getBadgeTemplates(tab).length > 0 ? this._getBadgeTemplates(tab).map((badgeTemplate, badgeIndex) => html`
+                        <div class="badge-rule-row">
+                          <ha-input
+                            .label=${`Badge Rule ${badgeIndex + 1} (Jinja)`}
+                            .value=${badgeTemplate}
+                            placeholder="{{ is_state('light.kitchen', 'on') }}"
+                            @input=${(e: Event) => this._handleBadgeTemplateChange(e, index, badgeIndex)}
+                          ></ha-input>
+                          <button
+                            class="icon-btn danger-btn"
+                            type="button"
+                            title="Remove Badge Rule"
+                            @click=${() => this._removeBadgeTemplate(index, badgeIndex)}
+                          >
+                            <ha-icon icon="mdi:delete"></ha-icon>
+                          </button>
+                        </div>
+                      `) : html`<p class="badge-empty-state">No badge rules yet. Add one to control the badge.</p>`}
+                    </div>
 
                     <div style="margin-top: 16px;">
                       <h3 style="margin: 0 0 12px 0;">Cards</h3>
@@ -693,6 +779,62 @@ export class SimpleTabsEditor extends LitElement {
       gap: 16px;
       overflow: auto;
       margin: 16px;
+    }
+    .badge-settings {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      border-radius: 14px;
+      border: 1px solid var(--divider-color);
+      background: var(--ha-card-background, rgba(0,0,0,0.12));
+    }
+    .badge-settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .badge-settings-header h3 {
+      margin: 0;
+      font-size: 1rem;
+    }
+    .badge-display-group {
+      margin-top: 0;
+    }
+    .badge-rule-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: end;
+    }
+    .badge-empty-state {
+      margin: 0;
+      color: var(--secondary-text-color);
+      font-size: 0.95rem;
+    }
+    .secondary-btn,
+    .icon-btn {
+      border: 1px solid var(--divider-color);
+      background: var(--ha-card-background, rgba(0, 0, 0, 0.16));
+      color: var(--primary-text-color);
+      font: inherit;
+      cursor: pointer;
+    }
+    .secondary-btn {
+      padding: 8px 12px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    .icon-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .danger-btn {
+      color: var(--error-color);
     }
     .card-list-row {
       display: flex;

@@ -25,6 +25,8 @@ function configChanged(oldConfig: TabsCardConfig | undefined, newConfig: TabsCar
       tab.icon !== newTab.icon ||
       tab.id !== newTab.id ||
       tab.badge !== newTab.badge ||
+      JSON.stringify(tab.badge_templates) !== JSON.stringify(newTab.badge_templates) ||
+      tab.badge_display !== newTab.badge_display ||
       JSON.stringify('card' in tab ? tab.card : undefined) !== JSON.stringify('card' in newTab ? newTab.card : undefined) ||
       JSON.stringify('cards' in tab ? tab.cards : undefined) !== JSON.stringify('cards' in newTab ? newTab.cards : undefined) ||
       JSON.stringify(tab.conditions) !== JSON.stringify(newTab.conditions);
@@ -36,6 +38,7 @@ export interface StateCondition { entity: string; state: string; }
 export interface TemplateCondition { template: string; }
 export interface UserCondition { user: string | string[]; }
 export type Condition = StateCondition | TemplateCondition | UserCondition;
+export type BadgeDisplay = 'dot' | 'count' | 'exclamation';
 
 // Base properties shared by both tab formats
 interface TabConfigBase {
@@ -43,6 +46,8 @@ interface TabConfigBase {
   icon?: string;
   id?: string;
   badge?: string;
+  badge_templates?: string[];
+  badge_display?: BadgeDisplay;
   conditions?: Condition[];
 }
 
@@ -120,6 +125,7 @@ export class SimpleTabs extends LitElement {
   @state() private _renderedTitles: (string | undefined)[] = [];
   @state() private _renderedIcons: (string | undefined)[] = [];
   @state() private _renderedBadges: (boolean | undefined)[] = [];
+  @state() private _renderedBadgeContents: string[] = [];
 
   @query('.tabs') private _tabsEl?: HTMLDivElement;
   @query('.content-container') private _contentEl?: HTMLDivElement;
@@ -131,6 +137,7 @@ export class SimpleTabs extends LitElement {
   private _hassSet = false;
   private _initialized = false;
   private _lastCheckedUrl = '';
+  private _badgeRuleResults: boolean[][] = [];
   // Swipe gesture tracking
   private _touchStartX = 0;
   private _touchStartY = 0;
@@ -390,6 +397,8 @@ export class SimpleTabs extends LitElement {
     this._renderedTitles = config.tabs.map(tab => tab.title);
     this._renderedIcons = config.tabs.map(tab => tab.icon);
     this._renderedBadges = new Array(len).fill(false);
+    this._renderedBadgeContents = new Array(len).fill('');
+    this._badgeRuleResults = config.tabs.map(tab => new Array(this._getBadgeTemplates(tab).length).fill(false));
     this._visibleIndices = config.tabs.map((_, i) => i); // Assume all visible initially
 
     this._initialized = false;
@@ -407,6 +416,71 @@ export class SimpleTabs extends LitElement {
     return typeof value === 'string' && (value.includes('{{') || value.includes('{%'));
   }
 
+  private _getBadgeTemplates(tab: TabConfig): string[] {
+    if (Array.isArray(tab.badge_templates) && tab.badge_templates.length > 0) {
+      return tab.badge_templates.filter((template): template is string => typeof template === 'string');
+    }
+    return tab.badge ? [tab.badge] : [];
+  }
+
+  private _getBadgeDisplay(tab: TabConfig): BadgeDisplay {
+    return tab.badge_display ?? 'dot';
+  }
+
+  private _shouldAnimateTransitions(): boolean {
+    return !!this._config?.enable_swipe && !!this._config?.swipe_animation;
+  }
+
+  private _isTruthyTemplateResult(result: unknown): boolean {
+    if (result === true) return true;
+    if (typeof result === 'number') return result > 0;
+    if (typeof result === 'string') {
+      const normalized = result.trim().toLowerCase();
+      return normalized === 'true' || normalized === 'on' || (normalized !== '' && normalized !== 'false' && normalized !== 'off' && normalized !== '0');
+    }
+    return false;
+  }
+
+  private _getBadgeContent(tab: TabConfig, trueCount: number): string {
+    switch (this._getBadgeDisplay(tab)) {
+      case 'count':
+        return String(trueCount);
+      case 'exclamation':
+        return '!';
+      case 'dot':
+      default:
+        return '';
+    }
+  }
+
+  private _setBadgeRuleResult(tabIndex: number, ruleIndex: number, value: boolean, tab: TabConfig): void {
+    const currentResults = this._badgeRuleResults[tabIndex] ?? [];
+    if (currentResults[ruleIndex] === value) return;
+
+    const nextResults = [...currentResults];
+    nextResults[ruleIndex] = value;
+    this._badgeRuleResults[tabIndex] = nextResults;
+    this._updateBadgeState(tabIndex, tab);
+  }
+
+  private _updateBadgeState(tabIndex: number, tab: TabConfig): void {
+    const trueCount = (this._badgeRuleResults[tabIndex] ?? []).filter(Boolean).length;
+    const isVisible = trueCount > 0;
+    const content = isVisible ? this._getBadgeContent(tab, trueCount) : '';
+
+    if (this._renderedBadges[tabIndex] !== isVisible) {
+      const next = [...this._renderedBadges];
+      next[tabIndex] = isVisible;
+      this._renderedBadges = next;
+    }
+
+    if (this._renderedBadgeContents[tabIndex] !== content) {
+      const next = [...this._renderedBadgeContents];
+      next[tabIndex] = content;
+      this._renderedBadgeContents = next;
+    }
+  }
+
   private async _subscribeToTemplates(tabs: TabConfig[]): Promise<void> {
     const renderTemplate = async (template: string, callback: (result: any) => void) => {
       try {
@@ -422,7 +496,7 @@ export class SimpleTabs extends LitElement {
 
     tabs.forEach((tab, index) => {
       // Helper for state updates
-      const updateState = (key: '_renderedTitles' | '_renderedIcons' | '_renderedBadges', value: any) => {
+      const updateState = (key: '_renderedTitles' | '_renderedIcons', value: any) => {
         if (this[key][index] !== value) {
           const newArray = [...this[key]];
           newArray[index] = value;
@@ -437,22 +511,20 @@ export class SimpleTabs extends LitElement {
         promises.push(renderTemplate(tab.icon as string, msg => updateState('_renderedIcons', msg.result)));
       }
 
-      if (tab.badge) {
-        if (this._isTemplate(tab.badge)) {
-          promises.push(renderTemplate(tab.badge, msg => {
-            const res = msg.result;
-            const isVisible = (res === true || res === 'on' || res === 'true' || (typeof res === 'number' && res > 0));
-            updateState('_renderedBadges', isVisible);
-          }));
-        } else {
-          const res = tab.badge;
-          const isVisible = (res === 'true' || res === 'on');
-          if (this._renderedBadges[index] !== isVisible) {
-            const next = [...this._renderedBadges];
-            next[index] = isVisible;
-            this._renderedBadges = next;
+      const badgeTemplates = this._getBadgeTemplates(tab);
+      if (badgeTemplates.length > 0) {
+        this._badgeRuleResults[index] = new Array(badgeTemplates.length).fill(false);
+        badgeTemplates.forEach((badgeTemplate, badgeIndex) => {
+          if (this._isTemplate(badgeTemplate)) {
+            promises.push(renderTemplate(badgeTemplate, msg => {
+              this._setBadgeRuleResult(index, badgeIndex, this._isTruthyTemplateResult(msg.result), tab);
+            }));
+          } else {
+            this._setBadgeRuleResult(index, badgeIndex, this._isTruthyTemplateResult(badgeTemplate), tab);
           }
-        }
+        });
+      } else {
+        this._updateBadgeState(index, tab);
       }
 
       tab.conditions?.forEach(cond => {
@@ -523,7 +595,8 @@ export class SimpleTabs extends LitElement {
       changedProps.has('_visibleIndices') || // Use the computed indices
       changedProps.has('_renderedTitles') ||
       changedProps.has('_renderedIcons') ||
-      changedProps.has('_renderedBadges')) {
+      changedProps.has('_renderedBadges') ||
+      changedProps.has('_renderedBadgeContents')) {
       return true;
     }
 
@@ -903,21 +976,27 @@ export class SimpleTabs extends LitElement {
   private _selectTab(index: number, userInitiated = false): void {
     if (index === this._selectedTabIndex) return;
 
-    // Calculate direction
-    // If wrapping support is added later, logic needs update. For now simple index comparison.
-    // RTL support might invert this logic visually.
-    const direction = index > this._selectedTabIndex ? 'right' : 'left';
+    if (this._shouldAnimateTransitions()) {
+      // Calculate direction
+      // If wrapping support is added later, logic needs update. For now simple index comparison.
+      // RTL support might invert this logic visually.
+      const direction = index > this._selectedTabIndex ? 'right' : 'left';
 
-    this._prevSelectedTabIndex = this._selectedTabIndex;
-    this._selectedTabIndex = index;
-    this._transitionDirection = direction;
+      this._prevSelectedTabIndex = this._selectedTabIndex;
+      this._selectedTabIndex = index;
+      this._transitionDirection = direction;
 
-    // Reset transition direction after animation to prevent sticking
-    // We use a timeout slightly longer than CSS transition (300ms)
-    setTimeout(() => {
+      // Reset transition direction after animation to prevent sticking
+      // We use a timeout slightly longer than CSS transition (300ms)
+      setTimeout(() => {
+        this._transitionDirection = 'none';
+        this._prevSelectedTabIndex = index; // Ensure we don't keep old tab in DOM forever
+      }, 350);
+    } else {
+      this._selectedTabIndex = index;
+      this._prevSelectedTabIndex = index;
       this._transitionDirection = 'none';
-      this._prevSelectedTabIndex = index; // Ensure we don't keep old tab in DOM forever
-    }, 350);
+    }
 
     this._saveTabToMemory(index);
     if (userInitiated) {
@@ -965,16 +1044,21 @@ export class SimpleTabs extends LitElement {
             >
               ${this._renderedIcons[originalIndex] ? html`<ha-icon .icon=${this._renderedIcons[originalIndex]}></ha-icon>` : ''}
               ${this._renderedTitles[originalIndex] ? html`<span>${this._renderedTitles[originalIndex]}</span>` : ''}
-              ${this._renderedBadges[originalIndex] ? html`<span class="badge"></span>` : ''}
+              ${this._renderedBadges[originalIndex] ? html`
+                <span class="badge ${this._renderedBadgeContents[originalIndex] ? 'badge--with-content' : 'badge--dot'}">
+                  ${this._renderedBadgeContents[originalIndex]}
+                </span>
+              ` : ''}
             </button>`
     )}
         </div>
       </div>
     `;
 
-    const animateClass = this._config.swipe_animation ? 'animate' : '';
+    const shouldAnimateTransitions = this._shouldAnimateTransitions();
+    const animateClass = shouldAnimateTransitions ? 'animate' : '';
     const transitioningClass =
-      this._config.swipe_animation && this._transitionDirection !== 'none'
+      shouldAnimateTransitions && this._transitionDirection !== 'none'
         ? 'is-transitioning'
         : '';
 
@@ -1130,13 +1214,32 @@ export class SimpleTabs extends LitElement {
     
     .badge {
         position: absolute;
-        top: -1px;
+        top: 0px;
         right: 0px;
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
+        min-width: 18px;
+        height: 18px;
+        padding: 0;
+        border-radius: 999px;
         background-color: var(--error-color, #db4437);
+        color: var(--text-primary-color, #fff);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: 700;
+        line-height: 1;
         pointer-events: none;
+    }
+
+    .badge--with-content {
+        min-width: 18px;
+        height: 18px;
+        padding: 0;
+    }
+
+    .badge--dot {
+      min-width: 14px !important;
+      height: 14px;
     }
 
     .tab-button:hover { 
