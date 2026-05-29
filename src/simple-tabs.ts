@@ -25,8 +25,9 @@ function configChanged(oldConfig: TabsCardConfig | undefined, newConfig: TabsCar
       tab.icon !== newTab.icon ||
       tab.id !== newTab.id ||
       tab.badge !== newTab.badge ||
-      JSON.stringify(tab.card) !== JSON.stringify(tab.card) ||
-      JSON.stringify(tab.conditions) !== JSON.stringify(tab.conditions);
+      JSON.stringify('card' in tab ? tab.card : undefined) !== JSON.stringify('card' in newTab ? newTab.card : undefined) ||
+      JSON.stringify('cards' in tab ? tab.cards : undefined) !== JSON.stringify('cards' in newTab ? newTab.cards : undefined) ||
+      JSON.stringify(tab.conditions) !== JSON.stringify(newTab.conditions);
   });
 }
 

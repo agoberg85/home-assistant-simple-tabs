@@ -131,7 +131,10 @@ export class SimpleTabsEditor extends LitElement {
   }
 
   private _valueChanged(newConfig: TabsCardConfig): void {
-    fireEvent(this, 'config-changed', { config: newConfig });
+    // Keep the editor state in sync even if the parent editor delays pushing
+    // the updated config back down, which can happen in nested popup editors.
+    this._config = newConfig;
+    fireEvent(this, 'config-changed', { config: newConfig }, { bubbles: true, composed: true });
   }
 
   private _toggleHideInactive(ev: Event): void {
