@@ -14,7 +14,7 @@ Subscribe to Youtube channel: https://www.youtube.com/@My_Smart_Home
 
 - Organize any cards into a clean tabbed layout
 - Top or bottom tab positioning
-- Start/center/end tab alignment
+- Start/center/end placement for the outer tab bar
 - Per-tab icon, title, badge rules, badge display mode, and deep-link `id`
 - Dynamic tab visibility with `entity`, `template`, and `user` conditions
 - Dynamic default tab rules
@@ -22,11 +22,12 @@ Subscribe to Youtube channel: https://www.youtube.com/@My_Smart_Home
 - Optional swipe animations
 - Optional tab memory (`false`, `true`, `per_device`)
 - Optional haptic feedback on supported devices
-- Extensive style options for tabs and container
+- Fixed outer tab bar with horizontal scrolling inside when needed
+- Extensive style options for the card, tab bar, and individual buttons
 - Visual editor with:
   - Card list management (move/edit/delete)
   - Card picker for adding cards to a tab
-  - Per-card modal editing via Home Assistant card editor
+  - Per-card inline editing via Home Assistant card editor
 
 ## Installation
 
@@ -71,7 +72,7 @@ You can provide either:
 - `card` (single card)
 - `cards` (list of cards)
 
-When `cards` is used, Simple Tabs wraps them as a vertical stack automatically.
+When `cards` is used, Simple Tabs wraps them as a 1-column grid automatically.
 
 ```yaml
 tabs:
@@ -88,7 +89,7 @@ tabs:
 
 - The editor now shows a card list for each tab.
 - Use the picker under the list to add cards.
-- Use the edit icon to open Home Assistant's native card editor modal for each card.
+- Use the edit icon to open an inline Home Assistant card editor under each card.
 - Manual YAML mode is still fully supported in dashboard YAML view.
 
 ## Configuration
@@ -99,20 +100,24 @@ tabs:
 | :--- | :--- | :--- | :--- | :--- |
 | `type` | string | **Required** | `custom:simple-tabs` | |
 | `tabs` | list | **Required** | A list of tab objects to display. See below. | |
-| `alignment` | string | Optional | Justification for the row of tabs. (`start`, `center`, `end`) | `'center'` |
+| `tabs_alignment` | string | Optional | Positions the tab bar within the card. (`start`, `center`, `end`) | `'center'` |
 | `default_tab` | number/list | Optional | Defines the default tab. Can be a static number (1-based) or a list of conditional rules (see Advanced Configuration). | `1` |
 | `hide_inactive_tab_titles` | boolean | Optional | If `true`, hides the title text on tabs that are not currently active (showing only the icon). | `false` |
-| `show_fade` | boolean | Optional | Enable fade mask on tab row edges when horizontal scrolling is possible. | `true` |
 | `pre-load` | boolean | Optional | If `true`, renders all tab content on load for faster switching. | `false` |
-| `background-color`| string | Optional | CSS color for the button background. | `none` |
-| `border-color` | string | Optional | CSS color for the button border. | Your theme's `divider-color` |
-| `text-color` | string | Optional | CSS color for the button text. | Your theme's `secondary-text-color`|
-| `hover-color` | string | Optional | CSS color for button text and border on hover. | Your theme's `primary-text-color`|
-| `active-text-color`| string | Optional | CSS color for the active tab's text. | Your theme's `text-primary-color`|
-| `active-background`| string | Optional | CSS color/gradient for the active tab's background. | Your theme's `primary-color` |
-| `container_background`| string | Optional | CSS color/gradient for the background color of the container. | none |
-| `container_padding`| string | Optional | Container padding | 12px |
-| `container_rounding`| string | Optional | Border radius of the container | 32px |
+| `button_background`| string | Optional | CSS color/gradient for each tab button background. | `none` |
+| `button_border_color` | string | Optional | Border color for each tab button. | Your theme's `divider-color` |
+| `button_text_color` | string | Optional | Text/icon color for each tab button. | Your theme's `secondary-text-color`|
+| `button_hover_color` | string | Optional | Text/icon color for a hovered button. | Your theme's `primary-text-color`|
+| `button_hover_border_color` | string | Optional | Border color for a hovered button. | Follows `button_hover_color` by default |
+| `button_active_text_color`| string | Optional | Text/icon color for the active button. | Your theme's `text-primary-color`|
+| `button_active_background`| string | Optional | CSS color/gradient for the active button background. | Your theme's `primary-color` |
+| `card_background`| string | Optional | Background for the overall card wrapper. | none |
+| `card_padding`| string | Optional | Padding for the overall card wrapper. | 12px |
+| `card_border_radius`| string | Optional | Border radius of the overall card wrapper. | 32px |
+| `bar_background`| string | Optional | Background for the outer tab bar shell. | transparent |
+| `bar_border`| string | Optional | Full CSS border for the outer tab bar shell. | none |
+| `bar_padding`| string | Optional | Padding between the tab bar shell and the button strip. | 1px 2px |
+| `bar_border_radius`| string | Optional | Border radius for the outer tab bar shell. | 0 |
 | `tabs_gap`| string | Optional | Gap between buttons | 6px |
 | `button_padding`| string | Optional | Padding inside each button | 12px |
 | `tab_position` | string | Optional | Position of tabs. (`top`, `bottom`) | `'top'` |
@@ -122,6 +127,56 @@ tabs:
 | `swipe_threshold` | number | Optional | Pixels of movement required to trigger a swipe. | `50` |
 | `remember_tab` | boolean/string | Optional | Remember last selected tab. (`false`, `true`, `'per_device'`) | `false` |
 | `haptic_feedback` | boolean | Optional | Vibration feedback on tab change (mobile only). | `false` |
+
+### 1.5.0 Migration Notes
+
+Breaking changes in `1.5.0`:
+- The visual editor and docs now use the clearer `tabs_alignment`, `card_*`, `bar_*`, and `button_*` option names.
+- `show_fade` has been removed from the visual editor and no longer does anything.
+- The tab bar layout now treats the outer bar as a stable shell and scrolls the buttons inside it.
+
+Legacy styling aliases are still accepted for now: `alignment`, `background-color`, `border-color`, `text-color`, `hover-color`, `hover-border-color`, `active-text-color`, `active-background`, `container_*`, and `tab_buttons_*`. New configs should use the clearer names above.
+
+### Styling Layers
+
+- `card_*`: styles the overall card wrapper around the tab row and content.
+- `bar_*`: styles the fixed outer tab bar shell.
+- `button_*`: styles each individual tab button inside the bar.
+
+`tabs_alignment` moves the whole tab bar left, center, or right. If the bar already fills the available width, alignment has no visible effect.
+
+### Pill Bar Example
+
+```yaml
+type: custom:simple-tabs
+tabs_alignment: center
+card_background: transparent
+card_padding: 0 0 12px 0
+bar_background: "#2f2f2f"
+bar_border: "1px solid rgba(255,255,255,0.12)"
+bar_padding: 12px
+bar_border_radius: 999px
+button_background: transparent
+button_border_color: transparent
+button_active_background: "linear-gradient(90deg, #e59bc2, #f6c7a8)"
+button_active_text_color: "#222"
+tabs:
+  - title: Lys
+    icon: mdi:home
+    card:
+      type: markdown
+      content: Lighting
+  - title: Gardiner
+    icon: mdi:flower
+    card:
+      type: markdown
+      content: Blinds
+  - title: Klima
+    icon: mdi:thermometer
+    card:
+      type: markdown
+      content: Climate
+```
 
 ### Tab Object Options
 
@@ -142,6 +197,96 @@ Each entry in the `tabs` list is an object with the following properties:
 
 *Either `title` or `icon` should be defined.
 *Use either `card` or `cards`.
+
+### Conditional Tabs
+
+You can dynamically show or hide a tab by adding a `conditions` list to its configuration. The tab will only be visible if **all** conditions in the list are met (this is an "AND" relationship).
+
+Each condition in the list must be an object of one of the following types:
+
+#### State Condition
+
+This condition checks if a specific entity has a specific state. It also supports numeric comparisons for sensor-like entities.
+
+| Key | Type | Description |
+| :--- | :--- | :--- |
+| `entity`| string | The entity ID to check. |
+| `state` | string | The state the entity must have for the condition to be true. Supports exact matches like `'on'` or `'0'`, and numeric comparisons like `'> 0'`, `'>= 10'`, `'< 5'`, `'<= 5'`, `'= 3'`, or `'== 3'`. |
+
+**Example:** Show a "Security" tab only if an `input_boolean` is on.
+```yaml
+tabs:
+  - title: Security
+    icon: mdi:shield-lock
+    conditions:
+      - entity: input_boolean.show_security_tab
+        state: 'on'
+    card:
+      type: alarm-panel
+      entity: alarm_control_panel.home
+```
+
+**Example:** Show an "Alerts" tab only if a numeric sensor is above zero.
+```yaml
+tabs:
+  - title: Alerts
+    icon: mdi:alert
+    conditions:
+      - entity: sensor.unusual_temperature_alert
+        state: '> 0'
+    card:
+      type: markdown
+      content: There are active temperature alerts.
+```
+
+#### Template Condition
+
+This condition evaluates a Home Assistant template in real-time. The tab will be shown if the template's result is "truthy" (e.g., `true`, a non-zero number, or a non-empty string like "show"). For clarity, it's best to have your template explicitly return `true` or `false`.
+
+| Key | Type | Description |
+| :--- | :--- | :--- |
+| `template`| string | The Home Assistant template to evaluate. |
+
+**Example:** Only show a "Guest Mode" tab if the `guest_mode` input boolean is on.
+```yaml
+tabs:
+  - title: Guest Mode
+    icon: mdi:account-star
+    conditions:
+      - template: "{{ is_state('input_boolean.guest_mode', 'on') }}"
+    card:
+      # ... card config for guests
+```
+
+**Simple example:** Show a tab when the outside temperature is above freezing.
+```yaml
+tabs:
+  - title: Outdoor Climate
+    conditions:
+      - template: "{{ states('sensor.outdoor_temperature') | float(0) > 0 }}"
+    card:
+      type: markdown
+      content: It is above freezing outside.
+```
+
+#### Combining Conditions
+
+You can add multiple condition objects to the list to create more specific rules.
+
+**Example:** Show a "Good Morning" tab only if a specific person is home *and* it is between 6 AM and 11 AM.
+```yaml
+tabs:
+  - title: Good Morning
+    icon: mdi:weather-sunset-up
+    conditions:
+      # Condition 1: Person must be home
+      - entity: person.jane_doe
+        state: 'home'
+      # AND Condition 2: Must be morning
+      - template: "{{ now().hour >= 6 and now().hour < 11 }}"
+    card:
+      # ... card showing morning routine info
+```
 
 ### Badge Configuration
 
@@ -243,7 +388,7 @@ This configuration demonstrates dynamic defaults, user restrictions, and the com
 
 ```yaml
 type: custom:simple-tabs
-alignment: start
+tabs_alignment: start
 hide_inactive_tab_titles: true
 default_tab:
   - tab: 2

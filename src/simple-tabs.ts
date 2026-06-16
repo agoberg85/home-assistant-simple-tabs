@@ -12,25 +12,7 @@ import { forwardHaptic } from 'custom-card-helpers';
 
 // --- CONFIG CHECKER ---
 function configChanged(oldConfig: TabsCardConfig | undefined, newConfig: TabsCardConfig): boolean {
-  if (!oldConfig) return true;
-  if (oldConfig.tabs.length !== newConfig.tabs.length) return true;
-  if (oldConfig.hide_inactive_tab_titles !== newConfig.hide_inactive_tab_titles) return true;
-  if (oldConfig.show_fade !== newConfig.show_fade) return true;
-  if (JSON.stringify(oldConfig.default_tab) !== JSON.stringify(newConfig.default_tab)) return true;
-
-  return oldConfig.tabs.some((tab, index) => {
-    const newTab = newConfig.tabs[index];
-    if (!newTab) return true;
-    return tab.title !== newTab.title ||
-      tab.icon !== newTab.icon ||
-      tab.id !== newTab.id ||
-      tab.badge !== newTab.badge ||
-      JSON.stringify(tab.badge_templates) !== JSON.stringify(newTab.badge_templates) ||
-      tab.badge_display !== newTab.badge_display ||
-      JSON.stringify('card' in tab ? tab.card : undefined) !== JSON.stringify('card' in newTab ? newTab.card : undefined) ||
-      JSON.stringify('cards' in tab ? tab.cards : undefined) !== JSON.stringify('cards' in newTab ? newTab.cards : undefined) ||
-      JSON.stringify(tab.conditions) !== JSON.stringify(newTab.conditions);
-  });
+  return !oldConfig || JSON.stringify(oldConfig) !== JSON.stringify(newConfig);
 }
 
 // --- INTERFACES ---
@@ -78,18 +60,23 @@ export interface TabsCardConfig {
   hide_inactive_tab_titles?: boolean;
   show_fade?: boolean;
   'pre-load'?: boolean;
-  alignment?: 'start' | 'center' | 'end';
-  'background-color'?: string;
-  'border-color'?: string;
-  'text-color'?: string;
-  'hover-color'?: string;
-  'active-text-color'?: string;
-  'active-background'?: string;
+  tabs_alignment?: 'start' | 'center' | 'end';
+  button_background?: string;
+  button_border_color?: string;
+  button_text_color?: string;
+  button_hover_color?: string;
+  button_hover_border_color?: string;
+  button_active_text_color?: string;
+  button_active_background?: string;
   margin?: string;
   'margin-bottom'?: string;
-  container_background?: string;
-  container_padding?: string;
-  container_rounding?: string;
+  card_background?: string;
+  card_padding?: string;
+  card_border_radius?: string;
+  bar_background?: string;
+  bar_border?: string;
+  bar_padding?: string;
+  bar_border_radius?: string;
   tabs_gap?: string;
   button_padding?: string;
   tab_position?: 'top' | 'bottom';
@@ -99,6 +86,23 @@ export interface TabsCardConfig {
   swipe_threshold?: number;
   remember_tab?: boolean | 'per_device';
   haptic_feedback?: boolean;
+
+  // Legacy aliases kept for compatibility.
+  alignment?: 'start' | 'center' | 'end';
+  'background-color'?: string;
+  'border-color'?: string;
+  'text-color'?: string;
+  'hover-color'?: string;
+  'hover-border-color'?: string;
+  'active-text-color'?: string;
+  'active-background'?: string;
+  container_background?: string;
+  container_padding?: string;
+  container_rounding?: string;
+  tab_buttons_background?: string;
+  tab_buttons_border?: string;
+  tab_buttons_padding?: string;
+  tab_buttons_rounding?: string;
 }
 
 declare global {
@@ -117,8 +121,7 @@ export class SimpleTabs extends LitElement {
   @state() private _prevSelectedTabIndex = 0;
   @state() private _transitionDirection: 'left' | 'right' | 'none' = 'none';
 
-  // OPTIMIZATION: Store visibility as a simple array
-  @state() private _tabVisibility: boolean[] = [];
+  @state() private _tabTemplateConditionResults: boolean[][] = [];
 
   // OPTIMIZATION: Memoized visible indices to avoid map/filter in render
   @state() private _visibleIndices: number[] = [];
@@ -128,7 +131,7 @@ export class SimpleTabs extends LitElement {
   @state() private _renderedBadges: (boolean | undefined)[] = [];
   @state() private _renderedBadgeContents: string[] = [];
 
-  @query('.tabs') private _tabsEl?: HTMLDivElement;
+  @query('.tabs-scroll') private _tabsEl?: HTMLDivElement;
   @query('.content-container') private _contentEl?: HTMLDivElement;
 
   private _helpers?: any;
@@ -139,9 +142,10 @@ export class SimpleTabs extends LitElement {
   private _initialized = false;
   private _lastCheckedUrl = '';
   private _badgeRuleResults: boolean[][] = [];
+  private _defaultTabTemplateResults: boolean[][] = [];
   // Swipe gesture tracking
-  private _touchStartX = 0;
-  private _touchStartY = 0;
+  private _touchStartX: number | null = null;
+  private _touchStartY: number | null = null;
   private _touchStartTime = 0;
   private _isSwiping = false;
   private _blockSwipeForGesture = false;
@@ -182,7 +186,6 @@ export class SimpleTabs extends LitElement {
       clearTimeout(this._disconnectCleanupTimeout);
       this._disconnectCleanupTimeout = undefined;
     }
-    window.addEventListener('resize', this._handleResize, { passive: true });
     window.addEventListener('hashchange', this._handleDeepLink, { passive: true });
     window.addEventListener('popstate', this._handleDeepLink, { passive: true });
     window.addEventListener('location-changed', this._handleDeepLink, { passive: true });
@@ -193,7 +196,6 @@ export class SimpleTabs extends LitElement {
 
   public async disconnectedCallback(): Promise<void> {
     super.disconnectedCallback();
-    window.removeEventListener('resize', this._handleResize);
     window.removeEventListener('hashchange', this._handleDeepLink);
     window.removeEventListener('popstate', this._handleDeepLink);
     window.removeEventListener('location-changed', this._handleDeepLink);
@@ -202,15 +204,12 @@ export class SimpleTabs extends LitElement {
     }, 0);
   }
 
-  // Throttled resize handler
-  private _handleResize = (): void => {
-    requestAnimationFrame(() => this._updateOverflowState());
-  };
 
   private _handleDeepLink = (): void => {
     // Use requestAnimationFrame to avoid blocking main thread during load
     requestAnimationFrame(() => this._checkDeepLink());
   }
+
 
   private _triggerHaptic(): void {
     if (!this._config?.haptic_feedback) return;
@@ -380,7 +379,21 @@ export class SimpleTabs extends LitElement {
     this._unsubscribeTemplates();
 
     this._config = {
-      alignment: 'center',
+      tabs_alignment: config.tabs_alignment ?? config.alignment ?? 'center',
+      button_background: config.button_background ?? config['background-color'],
+      button_border_color: config.button_border_color ?? config['border-color'],
+      button_text_color: config.button_text_color ?? config['text-color'],
+      button_hover_color: config.button_hover_color ?? config['hover-color'],
+      button_hover_border_color: config.button_hover_border_color ?? config['hover-border-color'] ?? config.button_hover_color ?? config['hover-color'],
+      button_active_text_color: config.button_active_text_color ?? config['active-text-color'],
+      button_active_background: config.button_active_background ?? config['active-background'],
+      card_background: config.card_background ?? config.container_background,
+      card_padding: config.card_padding ?? config.container_padding,
+      card_border_radius: config.card_border_radius ?? config.container_rounding,
+      bar_background: config.bar_background ?? config.tab_buttons_background,
+      bar_border: config.bar_border ?? config.tab_buttons_border,
+      bar_padding: config.bar_padding ?? config.tab_buttons_padding,
+      bar_border_radius: config.bar_border_radius ?? config.tab_buttons_rounding,
       'pre-load': false,
       tab_position: 'top',
       enable_swipe: true,
@@ -395,12 +408,19 @@ export class SimpleTabs extends LitElement {
     // Initialize Arrays
     const len = config.tabs.length;
     this._cards = new Array(len).fill(null);
-    this._tabVisibility = new Array(len).fill(true);
+    this._tabTemplateConditionResults = config.tabs.map(tab =>
+      (tab.conditions ?? []).map(cond => ('template' in cond ? false : true))
+    );
     this._renderedTitles = config.tabs.map(tab => tab.title);
     this._renderedIcons = config.tabs.map(tab => tab.icon);
     this._renderedBadges = new Array(len).fill(false);
     this._renderedBadgeContents = new Array(len).fill('');
     this._badgeRuleResults = config.tabs.map(tab => new Array(this._getBadgeTemplates(tab).length).fill(false));
+    this._defaultTabTemplateResults = Array.isArray(config.default_tab)
+      ? config.default_tab.map(rule =>
+        (rule.conditions ?? []).map(cond => ('template' in cond ? false : true))
+      )
+      : [];
     this._visibleIndices = config.tabs.map((_, i) => i); // Assume all visible initially
 
     this._initialized = false;
@@ -416,6 +436,11 @@ export class SimpleTabs extends LitElement {
 
   private _isTemplate(value: unknown): boolean {
     return typeof value === 'string' && (value.includes('{{') || value.includes('{%'));
+  }
+
+
+  private _getConfigValue<T>(...values: (T | undefined)[]): T | undefined {
+    return values.find((value) => value !== undefined);
   }
 
   private _getBadgeTemplates(tab: TabConfig): string[] {
@@ -490,6 +515,44 @@ export class SimpleTabs extends LitElement {
     }
   }
 
+  private _setTabTemplateConditionResult(tabIndex: number, conditionIndex: number, value: boolean): void {
+    const currentResults = this._tabTemplateConditionResults[tabIndex] ?? [];
+    if (currentResults[conditionIndex] === value) return;
+
+    const nextConditions = [...currentResults];
+    nextConditions[conditionIndex] = value;
+    const nextTabs = [...this._tabTemplateConditionResults];
+    nextTabs[tabIndex] = nextConditions;
+    this._tabTemplateConditionResults = nextTabs;
+  }
+
+  private _setDefaultTabTemplateResult(ruleIndex: number, conditionIndex: number, value: boolean): void {
+    const currentResults = this._defaultTabTemplateResults[ruleIndex] ?? [];
+    if (currentResults[conditionIndex] === value) return;
+
+    const nextConditions = [...currentResults];
+    nextConditions[conditionIndex] = value;
+    this._defaultTabTemplateResults[ruleIndex] = nextConditions;
+
+    if (!this._initialized) {
+      const defaultTab = this._calculateDefaultTab();
+      if (defaultTab !== null) {
+        this._selectedTabIndex = defaultTab;
+      }
+    }
+  }
+
+  private _areConditionsMet(conditions?: Condition[], templateResults: boolean[] = []): boolean {
+    if (!conditions?.length) return true;
+
+    return conditions.every((condition, conditionIndex) => {
+      if ('template' in condition) {
+        return templateResults[conditionIndex] ?? false;
+      }
+      return this._checkCondition(condition);
+    });
+  }
+
   private async _subscribeToTemplates(tabs: TabConfig[]): Promise<void> {
     const renderTemplate = async (template: string, callback: (result: any) => void) => {
       try {
@@ -536,23 +599,26 @@ export class SimpleTabs extends LitElement {
         this._updateBadgeState(index, tab);
       }
 
-      tab.conditions?.forEach(cond => {
+      tab.conditions?.forEach((cond, conditionIndex) => {
         if ('template' in cond) {
           promises.push(renderTemplate(cond.template, msg => {
-            let isTrue = !!msg.result;
-            if (typeof msg.result === 'string') {
-              const lower = msg.result.toLowerCase().trim();
-              isTrue = lower !== 'false' && lower !== '';
-            }
-            if (this._tabVisibility[index] !== isTrue) {
-              const newVisibility = [...this._tabVisibility];
-              newVisibility[index] = isTrue;
-              this._tabVisibility = newVisibility;
-            }
+            this._setTabTemplateConditionResult(index, conditionIndex, this._isTruthyTemplateResult(msg.result));
           }));
         }
       });
     });
+
+    if (Array.isArray(this._config.default_tab)) {
+      this._config.default_tab.forEach((rule, ruleIndex) => {
+        rule.conditions?.forEach((cond, conditionIndex) => {
+          if ('template' in cond) {
+            promises.push(renderTemplate(cond.template, msg => {
+              this._setDefaultTabTemplateResult(ruleIndex, conditionIndex, this._isTruthyTemplateResult(msg.result));
+            }));
+          }
+        });
+      });
+    }
 
     await Promise.all(promises);
   }
@@ -562,7 +628,7 @@ export class SimpleTabs extends LitElement {
   protected willUpdate(changedProps: PropertyValues): void {
 
     // 1. Recalculate visibility if dependencies change
-    if (changedProps.has('_tabVisibility') || changedProps.has('hass') || changedProps.has('_config')) {
+    if (changedProps.has('_tabTemplateConditionResults') || changedProps.has('hass') || changedProps.has('_config')) {
       this._calculateVisibleIndices();
     }
 
@@ -581,14 +647,7 @@ export class SimpleTabs extends LitElement {
       .map((_, i) => i)
       .filter(i => {
         const tab = this._config.tabs[i];
-        // Quick check for simple conditions (cached results)
-        if (tab.conditions) {
-          return tab.conditions.every(c => {
-            if ('template' in c) return this._tabVisibility[i];
-            return this._checkCondition(c);
-          });
-        }
-        return true;
+        return this._areConditionsMet(tab.conditions, this._tabTemplateConditionResults[i]);
       });
 
     // Only update if actually different (array comparison)
@@ -602,6 +661,7 @@ export class SimpleTabs extends LitElement {
     if (changedProps.has('_config') ||
       changedProps.has('_selectedTabIndex') ||
       changedProps.has('_visibleIndices') || // Use the computed indices
+      changedProps.has('_tabTemplateConditionResults') ||
       changedProps.has('_renderedTitles') ||
       changedProps.has('_renderedIcons') ||
       changedProps.has('_renderedBadges') ||
@@ -620,9 +680,44 @@ export class SimpleTabs extends LitElement {
     );
   }
 
+  private _parseNumericComparison(
+    expectedState: string
+  ): { operator: '>' | '>=' | '<' | '<=' | '=' | '=='; value: number } | null {
+    const match = expectedState.match(/^\s*(>=|<=|>|<|==|=)\s*(-?\d+(?:\.\d+)?)\s*$/);
+    if (!match) return null;
+
+    return {
+      operator: match[1] as '>' | '>=' | '<' | '<=' | '=' | '==',
+      value: Number(match[2]),
+    };
+  }
+
   private _checkCondition(c: Condition): boolean {
     if ('entity' in c) {
-      return this.hass.states[c.entity]?.state === c.state;
+      const actualState = this.hass.states[c.entity]?.state;
+      if (actualState === undefined) return false;
+
+      const numericComparison = this._parseNumericComparison(c.state);
+      if (numericComparison) {
+        const actualValue = Number(actualState);
+        if (Number.isNaN(actualValue)) return false;
+
+        switch (numericComparison.operator) {
+          case '>':
+            return actualValue > numericComparison.value;
+          case '>=':
+            return actualValue >= numericComparison.value;
+          case '<':
+            return actualValue < numericComparison.value;
+          case '<=':
+            return actualValue <= numericComparison.value;
+          case '=':
+          case '==':
+            return actualValue === numericComparison.value;
+        }
+      }
+
+      return actualState === c.state;
     }
     // Templates handled via subscriptions, User handled here
     if ('user' in c) {
@@ -633,25 +728,26 @@ export class SimpleTabs extends LitElement {
     return false;
   }
 
-  private _calculateDefaultTab(): number {
-    if (this._config.default_tab === undefined) return 0;
+  private _calculateDefaultTab(): number | null {
+    if (this._config.default_tab === undefined) return null;
 
     if (typeof this._config.default_tab === 'number') {
       const idx = this._config.default_tab - 1;
-      return (idx >= 0 && idx < this._config.tabs.length) ? idx : 0;
+      return (idx >= 0 && idx < this._config.tabs.length) ? idx : null;
     }
 
     if (Array.isArray(this._config.default_tab)) {
-      for (const rule of this._config.default_tab) {
+      for (const [ruleIndex, rule] of this._config.default_tab.entries()) {
         const index = rule.tab - 1;
         if (index < 0 || index >= this._config.tabs.length) continue;
         if (!rule.conditions || rule.conditions.length === 0) return index;
 
-        const allMet = rule.conditions.every(c => this._checkCondition(c));
-        if (allMet) return index;
+        if (this._areConditionsMet(rule.conditions, this._defaultTabTemplateResults[ruleIndex])) {
+          return index;
+        }
       }
     }
-    return 0;
+    return null;
   }
 
   private _checkDeepLink(): boolean {
@@ -700,7 +796,7 @@ export class SimpleTabs extends LitElement {
   /**
    * Normalizes tab card config to handle both single card and multi-card formats
    * Legacy: { card: {...} } - returns card as-is
-   * New: { cards: [{...}, {...}] } - wraps in vertical-stack
+   * New: { cards: [{...}, {...}] } - wraps in a 1-column grid
    */
   private _normalizeTabCard(tab: TabConfig): LovelaceCardConfig {
     // New multi-card format
@@ -755,23 +851,7 @@ export class SimpleTabs extends LitElement {
     }
   }
 
-  private _updateOverflowState(): void {
-    const tabsContainer = this._tabsEl;
-    const containerWrapper = this.shadowRoot?.querySelector('.tabs-container');
-    if (tabsContainer && containerWrapper) {
-      const scrollBuffer = 1;
-      const canScrollLeft = tabsContainer.scrollLeft > scrollBuffer;
-      const canScrollRight = tabsContainer.scrollWidth > tabsContainer.clientWidth + tabsContainer.scrollLeft + scrollBuffer;
 
-      // Only toggle if class is missing to avoid style recalc
-      if (containerWrapper.classList.contains('can-scroll-left') !== canScrollLeft) {
-        containerWrapper.classList.toggle('can-scroll-left', canScrollLeft);
-      }
-      if (containerWrapper.classList.contains('can-scroll-right') !== canScrollRight) {
-        containerWrapper.classList.toggle('can-scroll-right', canScrollRight);
-      }
-    }
-  }
 
   private async _createCards(tabConfigs: TabConfig[]): Promise<(LovelaceCard | null)[]> {
     await this._loadHelpers();
@@ -798,7 +878,7 @@ export class SimpleTabs extends LitElement {
         const dynamicDefault = this._calculateDefaultTab();
         const remembered = this._loadTabFromMemory();
 
-        if (dynamicDefault !== 0) {
+        if (dynamicDefault !== null) {
           // Dynamic default takes priority
           this._selectedTabIndex = dynamicDefault;
         } else if (remembered !== null) {
@@ -815,7 +895,7 @@ export class SimpleTabs extends LitElement {
       const dynamicDefault = this._calculateDefaultTab();
       const remembered = this._loadTabFromMemory();
 
-      if (dynamicDefault !== 0) {
+      if (dynamicDefault !== null) {
         this._selectedTabIndex = dynamicDefault;
       } else if (remembered !== null) {
         this._selectedTabIndex = remembered;
@@ -839,10 +919,6 @@ export class SimpleTabs extends LitElement {
 
     if (changedProps.has('_selectedTabIndex')) {
       this._scrollToActiveTab();
-    }
-
-    if (changedProps.has('_config') || changedProps.has('_visibleIndices')) {
-      requestAnimationFrame(() => this._updateOverflowState());
     }
   }
 
@@ -895,7 +971,6 @@ export class SimpleTabs extends LitElement {
       }
       if (isDragging) {
         tabsEl.scrollLeft = scrollLeft - walk;
-        this._updateOverflowState();
       }
     };
 
@@ -921,7 +996,7 @@ export class SimpleTabs extends LitElement {
   };
 
   private _handleTouchMove = (e: TouchEvent): void => {
-    if (!this._config?.enable_swipe || !this._touchStartX) return;
+    if (!this._config?.enable_swipe || this._touchStartX === null || this._touchStartY === null) return;
     if (this._blockSwipeForGesture) return;
 
     const touch = e.touches[0];
@@ -941,9 +1016,9 @@ export class SimpleTabs extends LitElement {
   };
 
   private _handleTouchEnd = (e: TouchEvent): void => {
-    if (!this._config?.enable_swipe || !this._touchStartX || !this._isSwiping) {
-      this._touchStartX = 0;
-      this._touchStartY = 0;
+    if (!this._config?.enable_swipe || this._touchStartX === null || this._touchStartY === null || !this._isSwiping) {
+      this._touchStartX = null;
+      this._touchStartY = null;
       this._isSwiping = false;
       this._blockSwipeForGesture = false;
       return;
@@ -956,8 +1031,8 @@ export class SimpleTabs extends LitElement {
     const threshold = this._config.swipe_threshold ?? 50;
 
     // Reset tracking
-    this._touchStartX = 0;
-    this._touchStartY = 0;
+    this._touchStartX = null;
+    this._touchStartY = null;
     this._isSwiping = false;
     this._blockSwipeForGesture = false;
 
@@ -1017,15 +1092,20 @@ export class SimpleTabs extends LitElement {
     if (!this._config || !this.hass) return html``;
 
     const styles: { [key: string]: string | undefined } = {
-      '--simple-tabs-bg-color': this._config['background-color'],
-      '--simple-tabs-border-color': this._config['border-color'],
-      '--simple-tabs-text-color': this._config['text-color'],
-      '--simple-tabs-hover-color': this._config['hover-color'],
-      '--simple-tabs-active-text-color': this._config['active-text-color'],
-      '--simple-tabs-active-bg': this._config['active-background'],
-      '--simple-tabs-container-bg': this._config.container_background,
-      '--simple-tabs-container-padding': this._config.container_padding,
-      '--simple-tabs-container-rounding': this._config.container_rounding,
+      '--simple-tabs-bg-color': this._getConfigValue(this._config.button_background, this._config['background-color']),
+      '--simple-tabs-border-color': this._getConfigValue(this._config.button_border_color, this._config['border-color']),
+      '--simple-tabs-text-color': this._getConfigValue(this._config.button_text_color, this._config['text-color']),
+      '--simple-tabs-hover-color': this._getConfigValue(this._config.button_hover_color, this._config['hover-color']),
+      '--simple-tabs-hover-border-color': this._getConfigValue(this._config.button_hover_border_color, this._config['hover-border-color'], this._config.button_hover_color, this._config['hover-color']),
+      '--simple-tabs-active-text-color': this._getConfigValue(this._config.button_active_text_color, this._config['active-text-color']),
+      '--simple-tabs-active-bg': this._getConfigValue(this._config.button_active_background, this._config['active-background']),
+      '--simple-tabs-container-bg': this._getConfigValue(this._config.card_background, this._config.container_background),
+      '--simple-tabs-container-padding': this._getConfigValue(this._config.card_padding, this._config.container_padding),
+      '--simple-tabs-container-rounding': this._getConfigValue(this._config.card_border_radius, this._config.container_rounding),
+      '--simple-tabs-buttons-bg': this._getConfigValue(this._config.bar_background, this._config.tab_buttons_background),
+      '--simple-tabs-buttons-border': this._getConfigValue(this._config.bar_border, this._config.tab_buttons_border),
+      '--simple-tabs-buttons-padding': this._getConfigValue(this._config.bar_padding, this._config.tab_buttons_padding),
+      '--simple-tabs-buttons-rounding': this._getConfigValue(this._config.bar_border_radius, this._config.tab_buttons_rounding),
       '--simple-tabs-inactive-title-display': this._config.hide_inactive_tab_titles ? 'none' : 'inline',
       '--simple-tabs-gap': this._config.tabs_gap,
       '--simple-tabs-button-padding': this._config.button_padding,
@@ -1036,30 +1116,32 @@ export class SimpleTabs extends LitElement {
       styles.margin = this._config.margin;
     }
 
-    const alignmentClass = `align-${this._config.alignment || 'center'}`;
-
-    // Logic for Fade Effect (using masks now)
-    const showFade = this._config.show_fade ?? true;
-    const fadeClass = showFade ? 'enable-fade' : '';
+    const alignmentClass = `align-${this._getConfigValue(this._config.tabs_alignment, this._config.alignment) || 'center'}`;
     const positionClass = this._config.tab_position === 'bottom' ? 'position-bottom' : 'position-top';
 
     const tabsSection = html`
-      <div class="tabs-container ${alignmentClass} ${fadeClass}">
-        <div class="tabs" role="tablist" @scroll=${this._updateOverflowState} @mousedown=${this._handleDragStart}>
-          ${this._visibleIndices.map(originalIndex => html`
-            <button
-              class="tab-button ${originalIndex === this._selectedTabIndex ? 'active' : ''}"
-              @click=${() => this._selectTab(originalIndex, true, 'click')}
-            >
-              ${this._renderedIcons[originalIndex] ? html`<ha-icon .icon=${this._renderedIcons[originalIndex]}></ha-icon>` : ''}
-              ${this._renderedTitles[originalIndex] ? html`<span>${this._renderedTitles[originalIndex]}</span>` : ''}
-              ${this._renderedBadges[originalIndex] ? html`
-                <span class="badge ${this._renderedBadgeContents[originalIndex] ? 'badge--with-content' : 'badge--dot'}">
-                  ${this._renderedBadgeContents[originalIndex]}
-                </span>
-              ` : ''}
-            </button>`
-    )}
+      <div class="tabs-row ${alignmentClass}">
+        <div class="tabs-viewport">
+          <div class="tabs-scroll" @mousedown=${this._handleDragStart}>
+            <div class="tabs-container">
+              <div class="tabs" role="tablist">
+              ${this._visibleIndices.map(originalIndex => html`
+                <button
+                  class="tab-button ${originalIndex === this._selectedTabIndex ? 'active' : ''}"
+                  @click=${() => this._selectTab(originalIndex, true, 'click')}
+                >
+                  ${this._renderedIcons[originalIndex] ? html`<ha-icon .icon=${this._renderedIcons[originalIndex]}></ha-icon>` : ''}
+                  ${this._renderedTitles[originalIndex] ? html`<span>${this._renderedTitles[originalIndex]}</span>` : ''}
+                  ${this._renderedBadges[originalIndex] ? html`
+                    <span class="badge ${this._renderedBadgeContents[originalIndex] ? 'badge--with-content' : 'badge--dot'}">
+                      ${this._renderedBadgeContents[originalIndex]}
+                    </span>
+                  ` : ''}
+                </button>`
+      )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -1121,81 +1203,76 @@ export class SimpleTabs extends LitElement {
       padding: var(--simple-tabs-container-padding, 0 0 12px 0);
       border-radius: var(--simple-tabs-container-rounding, 0);
       min-height: 50px; 
-      /* overflow: visible allows nested cards (e.g. simple-swipe-card) to
-         expand to their natural height without being clipped */
       overflow: visible;
     }
 
 
-    .tabs-container {
-      position: relative;
-      overflow: hidden;
-      box-sizing: border-box;
+    .tabs-row {
+      display: flex;
       width: 100%;
-      padding: 0px 2px;
+      box-sizing: border-box;
+      overflow: visible;
+    }
+
+    .tabs-row.align-start {
+      justify-content: flex-start;
+    }
+
+    .tabs-row.align-center {
+      justify-content: center;
+    }
+
+    .tabs-row.align-end {
+      justify-content: flex-end;
+    }
+
+    .tabs-viewport {
+      box-sizing: border-box;
+      width: fit-content;
+      max-width: 100%;
+      min-width: 0;
+      overflow: hidden;
+      background: var(--simple-tabs-buttons-bg, transparent);
+      border: var(--simple-tabs-buttons-border, none);
+      border-radius: var(--simple-tabs-buttons-rounding, 0);
+      padding: var(--simple-tabs-buttons-padding, 1px 2px);
       transform: translate3d(0,0,0);
-      
-      /* MASKING LOGIC FOR FADE EFFECT */
-      /* Default: No mask (fully visible) */
-      -webkit-mask-image: none;
-      mask-image: none;
-      transition: -webkit-mask-image 0.3s ease, mask-image 0.3s ease;
     }
 
-    /* Only apply masks if fade is enabled and scroll is needed */
-    .tabs-container.enable-fade.can-scroll-left {
-      -webkit-mask-image: linear-gradient(to right, transparent, black 100px);
-      mask-image: linear-gradient(to right, transparent, black 100px);
-    }
-
-    .tabs-container.enable-fade.can-scroll-right {
-      -webkit-mask-image: linear-gradient(to left, transparent, black 100px);
-      mask-image: linear-gradient(to left, transparent, black 100px);
-    }
-
-    .tabs-container.enable-fade.can-scroll-left.can-scroll-right {
-      -webkit-mask-image: linear-gradient(to right, transparent, black 100px, black calc(100% - 100px), transparent);
-      mask-image: linear-gradient(to right, transparent, black 100px, black calc(100% - 100px), transparent);
-    }    
-    
-    .tabs { 
-      display: flex; 
-      flex-wrap: nowrap; 
-      gap: var(--simple-tabs-gap, 6px); 
+    .tabs-scroll {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
       overflow-x: auto;
       overflow-y: hidden;
-      padding: 1px;
-      background: transparent;
-      border-radius: 0;
       scroll-behavior: smooth;
       scrollbar-width: none;
       -ms-overflow-style: none;
       cursor: grab;
       user-select: none;
       -webkit-user-select: none;
-      width: fit-content; 
-      max-width: 100%;
     }
-    
-    .tabs.dragging { cursor: grabbing; }
-    .tabs.dragging .tab-button { pointer-events: none; }
-    .tabs::-webkit-scrollbar { display: none; }
-    
-    /* Alignment for tabs within the wide container */
-    .tabs-container.align-start .tabs { 
-      justify-content: flex-start; 
+
+    .tabs-container {
+      box-sizing: border-box;
+      width: max-content;
+      min-width: max-content;
+      overflow: visible;
     }
-    .tabs-container.align-center .tabs { 
-      margin: 0 auto; 
+
+    .tabs {
+      box-sizing: border-box;
+      display: inline-flex;
+      flex-wrap: nowrap;
+      gap: var(--simple-tabs-gap, 6px);
+      width: max-content;
+      min-width: 0;
+      padding: 2px;
     }
-    .tabs-container.align-end {
-      display: flex;
-      justify-content: flex-end;
-    }
-    .tabs-container.align-end .tabs { 
-      justify-content: flex-end;
-    }
-    
+
+    .tabs-scroll.dragging { cursor: grabbing; }
+    .tabs-scroll.dragging .tab-button { pointer-events: none; }
+    .tabs-scroll::-webkit-scrollbar { display: none; }
     .tab-button { 
       box-sizing: border-box; 
       background: var(--simple-tabs-bg-color, none); 
@@ -1247,13 +1324,13 @@ export class SimpleTabs extends LitElement {
     }
 
     .badge--dot {
-      min-width: 14px !important;
-      height: 14px;
+      min-width: 12px !important;
+      height: 12px;
     }
 
     .tab-button:hover { 
       color: var(--simple-tabs-hover-color, var(--primary-text-color));
-      outline-color: var(--simple-tabs-hover-color, var(--primary-text-color));
+      outline-color: var(--simple-tabs-hover-border-color, var(--simple-tabs-hover-color, var(--primary-text-color)));
     }
     .tab-button.active { 
       color: var(--simple-tabs-active-text-color, var(--text-primary-color)); 

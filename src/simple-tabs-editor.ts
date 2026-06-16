@@ -14,8 +14,6 @@ declare global {
     'ha-formfield': HaFormField;
     'ha-switch': HaSwitch;
     'hui-card-element-editor': HuiCardElementEditor;
-    'hui-dialog-edit-card': HuiDialogEditCard;
-    'hui-card-picker': HuiCardPicker;
     'ha-icon-button': HaIconButton;
   }
 }
@@ -60,26 +58,40 @@ interface HuiCardElementEditor extends HTMLElement {
   lovelace?: any;
 }
 
-interface HuiDialogEditCard extends HTMLElement {
-  hass?: HomeAssistant;
-  showDialog(params: {
-    cardConfig: LovelaceCardConfig;
-    lovelaceConfig?: any;
-    saveCardConfig: (config: LovelaceCardConfig) => void | Promise<LovelaceCardConfig | void>;
-  }): Promise<void>;
-}
-
-interface HuiCardPicker extends HTMLElement {
-  hass?: HomeAssistant;
-  lovelace?: any;
-  label?: string;
-}
-
 interface HaIconButton extends HTMLElement {
   path: string;
   label: string;
   disabled: boolean;
 }
+
+interface PickerCardOption {
+  type: string;
+  name: string;
+  description: string;
+  config: LovelaceCardConfig;
+  custom?: boolean;
+}
+
+const CORE_CARD_OPTIONS: PickerCardOption[] = [
+  { type: 'tile', name: 'Tile', description: 'Show an entity as a compact tile.', config: { type: 'tile', entity: '' } },
+  { type: 'entities', name: 'Entities', description: 'Show a list of entities.', config: { type: 'entities', entities: [] } },
+  { type: 'markdown', name: 'Markdown', description: 'Render Markdown text.', config: { type: 'markdown', content: '## New card' } },
+  { type: 'button', name: 'Button', description: 'Show a tappable entity button.', config: { type: 'button', entity: '' } },
+  { type: 'entity', name: 'Entity', description: 'Show the state of one entity.', config: { type: 'entity', entity: '' } },
+  { type: 'gauge', name: 'Gauge', description: 'Show a numeric entity as a gauge.', config: { type: 'gauge', entity: '' } },
+  { type: 'history-graph', name: 'History Graph', description: 'Show entity history over time.', config: { type: 'history-graph', entities: [] } },
+  { type: 'statistics-graph', name: 'Statistics Graph', description: 'Show long-term statistics.', config: { type: 'statistics-graph', entities: [] } },
+  { type: 'media-control', name: 'Media Control', description: 'Control a media player.', config: { type: 'media-control', entity: '' } },
+  { type: 'picture', name: 'Picture', description: 'Show an image.', config: { type: 'picture', image: '' } },
+  { type: 'picture-entity', name: 'Picture Entity', description: 'Show an entity with an image.', config: { type: 'picture-entity', entity: '' } },
+  { type: 'picture-elements', name: 'Picture Elements', description: 'Place elements over an image.', config: { type: 'picture-elements', image: '', elements: [] } },
+  { type: 'horizontal-stack', name: 'Horizontal Stack', description: 'Stack cards side by side.', config: { type: 'horizontal-stack', cards: [] } },
+  { type: 'vertical-stack', name: 'Vertical Stack', description: 'Stack cards vertically.', config: { type: 'vertical-stack', cards: [] } },
+  { type: 'grid', name: 'Grid', description: 'Arrange cards in a grid.', config: { type: 'grid', columns: 2, square: false, cards: [] } },
+  { type: 'conditional', name: 'Conditional', description: 'Show a card only when conditions match.', config: { type: 'conditional', conditions: [], card: { type: 'markdown', content: 'Conditional card' } } },
+  { type: 'custom', name: 'Manual / Custom YAML', description: 'Start with a YAML-friendly custom card placeholder.', config: { type: 'custom:' } },
+];
+
 
 function stringifyCard(card: LovelaceCardConfig | string | undefined): string {
   if (!card) {
@@ -123,6 +135,8 @@ export class SimpleTabsEditor extends LitElement {
   @state() private _config?: TabsCardConfig;
   @state() private _helpers?: any;
   @state() private _openCardPickers: number[] = [];
+  @state() private _openCardEditors: string[] = [];
+  @state() private _cardPickerFilter = '';
   private _initialized = false;
 
   public setConfig(config: TabsCardConfig): void {
@@ -141,12 +155,6 @@ export class SimpleTabsEditor extends LitElement {
     if (!this._config) return;
     const target = ev.target as HaSwitch;
     this._valueChanged({ ...this._config, hide_inactive_tab_titles: target.checked });
-  }
-
-  private _toggleShowFade(ev: Event): void {
-    if (!this._config) return;
-    const target = ev.target as HaSwitch;
-    this._valueChanged({ ...this._config, show_fade: target.checked });
   }
 
   private _toggleEnableSwipe(ev: Event): void {
@@ -179,6 +187,25 @@ export class SimpleTabsEditor extends LitElement {
     this._valueChanged({ ...this._config, [field]: target.value });
   }
 
+
+  private _handleConfigInput(ev: Event, field: keyof TabsCardConfig): void {
+    if (!this._config) return;
+    const target = ev.target as HaInput;
+    this._valueChanged({ ...this._config, [field]: target.value });
+  }
+
+  private _renderConfigInput(field: keyof TabsCardConfig, label: string, placeholder = ''): TemplateResult {
+    return html`
+      <ha-input
+        .label=${label}
+        .value=${String(this._config?.[field] ?? '')}
+        .name=${String(field)}
+        .placeholder=${placeholder}
+        @input=${(e: Event) => this._handleConfigInput(e, field)}
+      ></ha-input>
+    `;
+  }
+
   /**
    * Check if tab is using new multi-card format
    */
@@ -191,8 +218,8 @@ export class SimpleTabsEditor extends LitElement {
    */
   private _getTabCard(tab: TabConfig): LovelaceCardConfig | undefined {
     if ('cards' in tab && Array.isArray(tab.cards)) {
-      // Multi-card format - return wrapped config
-      return { type: 'vertical-stack', cards: tab.cards };
+      // Multi-card format - return wrapped 1-column grid config
+      return { type: 'grid', columns: 1, square: false, cards: tab.cards };
     }
     return tab.card;
   }
@@ -331,6 +358,10 @@ export class SimpleTabsEditor extends LitElement {
     this._valueChanged({ ...this._config, tabs: newTabs });
   }
 
+  private _cardEditorKey(tabIndex: number, cardIndex: number): string {
+    return `${tabIndex}:${cardIndex}`;
+  }
+
   /**
    * Remove a card from a multi-card tab
    */
@@ -358,82 +389,64 @@ export class SimpleTabsEditor extends LitElement {
     }
   }
 
-  private async _openCardEditor(tabIndex: number, cardIndex?: number): Promise<void> {
-    if (!this._config || !this.hass) return;
-
-    const tab = this._config.tabs[tabIndex];
-    let currentCard: LovelaceCardConfig | undefined;
-
-    if (typeof cardIndex === 'number' && 'cards' in tab && Array.isArray(tab.cards)) {
-      currentCard = tab.cards[cardIndex];
-    } else if ('card' in tab && tab.card) {
-      currentCard = tab.card;
-    }
-
-    if (!currentCard) return;
-
-    try {
-      await customElements.whenDefined('hui-dialog-edit-card');
-      const dialog = document.createElement('hui-dialog-edit-card') as HuiDialogEditCard;
-      dialog.hass = this.hass;
-      document.body.appendChild(dialog);
-
-      const cleanup = (): void => {
-        dialog.removeEventListener('dialog-closed', cleanup as EventListener);
-        if (dialog.parentNode === document.body) {
-          document.body.removeChild(dialog);
-        }
-      };
-      dialog.addEventListener('dialog-closed', cleanup as EventListener, { once: true });
-
-      await dialog.showDialog({
-        cardConfig: currentCard,
-        lovelaceConfig: (this as any).lovelace,
-        saveCardConfig: (updatedCard: LovelaceCardConfig) => {
-          if (!this._config) return;
-          if (!updatedCard) return;
-          const newTabs = [...this._config.tabs];
-          const editableTab = newTabs[tabIndex];
-
-          if (typeof cardIndex === 'number' && 'cards' in editableTab && Array.isArray(editableTab.cards)) {
-            const newCards = [...editableTab.cards];
-            newCards[cardIndex] = updatedCard;
-            const multiCardTab: TabConfigMultiCard = {
-              ...editableTab,
-              cards: newCards,
-              card: undefined
-            } as TabConfigMultiCard;
-            delete (multiCardTab as any).card;
-            newTabs[tabIndex] = multiCardTab;
-          } else {
-            const singleTab: TabConfigSingleCard = {
-              ...editableTab,
-              card: updatedCard,
-              cards: undefined
-            } as TabConfigSingleCard;
-            delete (singleTab as any).cards;
-            newTabs[tabIndex] = singleTab;
-          }
-
-          this._valueChanged({ ...this._config, tabs: newTabs });
-        }
-      });
-    } catch (e) {
-      console.error('[Simple Tabs Editor] Failed to open visual card editor:', e);
-    }
+  private _toggleCardEditor(tabIndex: number, cardIndex: number): void {
+    const key = this._cardEditorKey(tabIndex, cardIndex);
+    this._openCardEditors = this._openCardEditors.includes(key)
+      ? this._openCardEditors.filter(editorKey => editorKey !== key)
+      : [key];
   }
 
-  private _handleCardPicked(ev: Event, tabIndex: number): void {
+  private _handleInlineCardChanged(ev: Event, tabIndex: number, cardIndex: number): void {
     if (!this._config) return;
     ev.stopPropagation();
-    const detail = (ev as CustomEvent).detail;
-    const pickedCard = detail?.config as LovelaceCardConfig | undefined;
-    if (!pickedCard || typeof pickedCard !== 'object') return;
+
+    const updatedCard = (ev as CustomEvent).detail?.config as LovelaceCardConfig | undefined;
+    if (!updatedCard || typeof updatedCard !== 'object') return;
 
     const cards = this._getTabCards(this._config.tabs[tabIndex]);
-    cards.push(pickedCard);
+    cards[cardIndex] = updatedCard;
+    this._setTabCards(tabIndex, cards);
+  }
+
+  private _cardPickerOptions(): PickerCardOption[] {
+    const customOptions = (window.customCards || [])
+      .filter(card => card.type && card.type !== 'simple-tabs')
+      .map(card => ({
+        type: `custom:${card.type}`,
+        name: card.name || card.type,
+        description: card.description || `Custom card: ${card.type}`,
+        config: { type: `custom:${card.type}` },
+        custom: true
+      }));
+
+    return [...CORE_CARD_OPTIONS, ...customOptions].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  private _filteredCardPickerOptions(): PickerCardOption[] {
+    const filter = this._cardPickerFilter.trim().toLowerCase();
+    const options = this._cardPickerOptions();
+    if (!filter) return options;
+
+    return options.filter(option =>
+      option.name.toLowerCase().includes(filter) ||
+      option.type.toLowerCase().includes(filter) ||
+      option.description.toLowerCase().includes(filter)
+    );
+  }
+
+  private _handleCardPickerFilter(ev: Event): void {
+    this._cardPickerFilter = (ev.target as HTMLInputElement).value;
+  }
+
+  private _addPickedCard(tabIndex: number, pickedCard: LovelaceCardConfig): void {
+    if (!this._config) return;
+
+    const cards = this._getTabCards(this._config.tabs[tabIndex]);
+    cards.push(JSON.parse(JSON.stringify(pickedCard)) as LovelaceCardConfig);
     this._setTabCards(tabIndex, cards);
     this._openCardPickers = this._openCardPickers.filter(index => index !== tabIndex);
+    this._openCardEditors = [this._cardEditorKey(tabIndex, cards.length - 1)];
+    this._cardPickerFilter = '';
   }
 
   private _cardTypeLabel(card: LovelaceCardConfig): string {
@@ -443,9 +456,13 @@ export class SimpleTabsEditor extends LitElement {
   }
 
   private _toggleCardPicker(tabIndex: number): void {
-    this._openCardPickers = this._openCardPickers.includes(tabIndex)
+    const isOpen = this._openCardPickers.includes(tabIndex);
+    this._openCardPickers = isOpen
       ? this._openCardPickers.filter(index => index !== tabIndex)
       : [tabIndex];
+    if (isOpen) {
+      this._cardPickerFilter = '';
+    }
   }
 
   private _moveTab(index: number, direction: 'up' | 'down'): void {
@@ -465,86 +482,131 @@ export class SimpleTabsEditor extends LitElement {
     return html`
       <div class="card-config">
         <div class="global-options">
-            <h3 class="settings-title">Display Settings</h3>
-            <div class="setting-row">
-              <span>Hide titles on inactive tabs</span>
-              <ha-switch 
+          <ha-expansion-panel .expanded=${true}>
+            <div slot="header" class="panel-header">General</div>
+            <div class="panel-body">
+              <div class="setting-row">
+                <span>Hide titles on inactive tabs</span>
+                <ha-switch
                   .checked=${this._config.hide_inactive_tab_titles || false}
                   @change=${this._toggleHideInactive}
-              ></ha-switch>
-            </div>
-            <div class="setting-row">
-              <span>Show scroll fade</span>
-              <ha-switch 
-                  .checked=${this._config.show_fade ?? true}
-                  @change=${this._toggleShowFade}
-              ></ha-switch>
-            </div>
-            <div class="select-group">
-              <label class="select-label">Tab Position</label>
-              <select 
-                  class="ha-like-select"
-                  .value=${this._config.tab_position || 'top'}
-                  @change=${(e: Event) => this._handleSelectChange(e, 'tab_position')}
-              >
-                  <option value="top">Top</option>
-                  <option value="bottom">Bottom</option>
-              </select>
-            </div>
-            <div class="select-group">
-              <label class="select-label">Tab Alignment</label>
-              <select 
-                  class="ha-like-select"
-                  .value=${this._config.alignment || 'center'}
-                  @change=${(e: Event) => this._handleSelectChange(e, 'alignment')}
-              >
-                  <option value="start">Start (Left)</option>
-                  <option value="center">Center</option>
-                  <option value="end">End (Right)</option>
-              </select>
-            </div>
-
-            <h3 class="settings-title behavior-title">Behavior Settings</h3>
-            <div class="setting-row">
-              <span>Enable swipe gestures</span>
-              <ha-switch 
-                  .checked=${this._config.enable_swipe ?? true}
-                  @change=${this._toggleEnableSwipe}
-              ></ha-switch>
-            </div>
-            <div class="setting-row">
-              <span>Animate swipe gestures</span>
-              <ha-switch 
-                  .checked=${this._config.swipe_animation ?? true}
-                  @change=${this._toggleSwipeAnimation}
-              ></ha-switch>
-            </div>
-            <div class="setting-row">
-              <span>Animate tab clicks</span>
-              <ha-switch 
-                  .checked=${this._config.tab_click_animation ?? this._config.swipe_animation ?? true}
-                  @change=${this._toggleTabClickAnimation}
-              ></ha-switch>
-            </div>
-            <div class="setting-row">
-              <span>Haptic feedback</span>
-              <ha-switch 
-                  .checked=${this._config.haptic_feedback || false}
-                  @change=${this._toggleHaptic}
-              ></ha-switch>
-            </div>
-            <div class="select-group">
-              <label class="select-label">Remember last tab</label>
-              <select 
+                ></ha-switch>
+              </div>
+              <div class="two-column-grid">
+                <div class="select-group compact-group">
+                  <label class="select-label">Tab Position</label>
+                  <select
+                    class="ha-like-select"
+                    .value=${this._config.tab_position || 'top'}
+                    @change=${(e: Event) => this._handleSelectChange(e, 'tab_position')}
+                  >
+                    <option value="top">Top</option>
+                    <option value="bottom">Bottom</option>
+                  </select>
+                </div>
+                <div class="select-group compact-group">
+                  <label class="select-label">Tab Alignment</label>
+                  <select
+                    class="ha-like-select"
+                    .value=${(this._config.tabs_alignment ?? this._config.alignment) || 'center'}
+                    @change=${(e: Event) => this._handleSelectChange(e, 'tabs_alignment')}
+                  >
+                    <option value="start">Start (Left)</option>
+                    <option value="center">Center</option>
+                    <option value="end">End (Right)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="select-group compact-group">
+                <label class="select-label">Remember last tab</label>
+                <select
                   class="ha-like-select"
                   .value=${String(this._config.remember_tab || 'false')}
                   @change=${(e: Event) => this._handleSelectChange(e, 'remember_tab')}
-              >
+                >
                   <option value="false">Off</option>
                   <option value="true">On</option>
                   <option value="per_device">Per Device</option>
-              </select>
+                </select>
+              </div>
             </div>
+          </ha-expansion-panel>
+
+          <ha-expansion-panel>
+            <div slot="header" class="panel-header">Interactions</div>
+            <div class="panel-body">
+              <div class="setting-row">
+                <span>Enable swipe gestures</span>
+                <ha-switch
+                  .checked=${this._config.enable_swipe ?? true}
+                  @change=${this._toggleEnableSwipe}
+                ></ha-switch>
+              </div>
+              <div class="setting-row">
+                <span>Animate swipe gestures</span>
+                <ha-switch
+                  .checked=${this._config.swipe_animation ?? true}
+                  @change=${this._toggleSwipeAnimation}
+                ></ha-switch>
+              </div>
+              <div class="setting-row">
+                <span>Animate tab clicks</span>
+                <ha-switch
+                  .checked=${this._config.tab_click_animation ?? this._config.swipe_animation ?? true}
+                  @change=${this._toggleTabClickAnimation}
+                ></ha-switch>
+              </div>
+              <div class="setting-row">
+                <span>Haptic feedback</span>
+                <ha-switch
+                  .checked=${this._config.haptic_feedback || false}
+                  @change=${this._toggleHaptic}
+                ></ha-switch>
+              </div>
+            </div>
+          </ha-expansion-panel>
+
+          <ha-expansion-panel>
+            <div slot="header" class="panel-header">Card Shell</div>
+            <div class="panel-body">
+              <div class="config-grid">
+                ${this._renderConfigInput('card_background', 'Card Background', 'transparent')}
+                ${this._renderConfigInput('card_border_radius', 'Card Border Radius', '32px')}
+                ${this._renderConfigInput('card_padding', 'Card Padding', '12px 0 12px 0')}
+                ${this._renderConfigInput('margin', 'Card Margin', '0')}
+                ${this._renderConfigInput('margin-bottom', 'Card Margin Bottom', '0')}
+              </div>
+            </div>
+          </ha-expansion-panel>
+
+          <ha-expansion-panel>
+            <div slot="header" class="panel-header">Tab Bar</div>
+            <div class="panel-body">
+              <div class="config-grid">
+                ${this._renderConfigInput('bar_background', 'Bar Background', 'transparent')}
+                ${this._renderConfigInput('bar_border', 'Bar Border', '1px solid rgba(255,255,255,0.12)')}
+                ${this._renderConfigInput('bar_padding', 'Bar Padding', '4px')}
+                ${this._renderConfigInput('bar_border_radius', 'Bar Border Radius', '999px')}
+                ${this._renderConfigInput('tabs_gap', 'Gap Between Buttons', '6px')}
+              </div>
+            </div>
+          </ha-expansion-panel>
+
+          <ha-expansion-panel>
+            <div slot="header" class="panel-header">Buttons</div>
+            <div class="panel-body">
+              <div class="config-grid">
+                ${this._renderConfigInput('button_background', 'Button Background', 'transparent')}
+                ${this._renderConfigInput('button_border_color', 'Button Border Color', 'transparent')}
+                ${this._renderConfigInput('button_text_color', 'Button Text Color', 'var(--secondary-text-color)')}
+                ${this._renderConfigInput('button_hover_color', 'Button Hover Text Color', 'var(--primary-text-color)')}
+                ${this._renderConfigInput('button_hover_border_color', 'Button Hover Border Color', 'var(--primary-text-color)')}
+                ${this._renderConfigInput('button_active_background', 'Active Button Background', 'var(--primary-color)')}
+                ${this._renderConfigInput('button_active_text_color', 'Active Button Text Color', 'var(--text-primary-color)')}
+                ${this._renderConfigInput('button_padding', 'Button Padding', '8px 16px')}
+              </div>
+            </div>
+          </ha-expansion-panel>
         </div>
 
         <div class="tabs-list">
@@ -673,7 +735,7 @@ export class SimpleTabsEditor extends LitElement {
                             <ha-icon-button
                               .label=${'Edit Card'}
                               .path=${'M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z'}
-                              @click=${() => this._openCardEditor(index, cardIndex)}
+                              @click=${() => this._toggleCardEditor(index, cardIndex)}
                             ></ha-icon-button>
                             <ha-icon-button
                               .label=${'Delete Card'}
@@ -684,6 +746,16 @@ export class SimpleTabsEditor extends LitElement {
                             ></ha-icon-button>
                           </div>
                         </div>
+                        ${this._openCardEditors.includes(this._cardEditorKey(index, cardIndex)) ? html`
+                          <div class="inline-card-editor">
+                            <hui-card-element-editor
+                              .hass=${this.hass}
+                              .lovelace=${this.lovelace}
+                              .value=${card}
+                              @config-changed=${(e: Event) => this._handleInlineCardChanged(e, index, cardIndex)}
+                            ></hui-card-element-editor>
+                          </div>
+                        ` : ''}
                       `)}
                       <button
                         class="picker-toggle-btn"
@@ -693,12 +765,26 @@ export class SimpleTabsEditor extends LitElement {
                       </button>
                       ${this._openCardPickers.includes(index) ? html`
                         <div class="card-picker-shell">
-                          <hui-card-picker
-                            .hass=${this.hass}
-                            .lovelace=${this.lovelace}
-                            label="Search cards"
-                            @config-changed=${(e: Event) => this._handleCardPicked(e, index)}
-                          ></hui-card-picker>
+                          <input
+                            class="card-picker-search"
+                            type="search"
+                            placeholder="Search cards"
+                            .value=${this._cardPickerFilter}
+                            @input=${this._handleCardPickerFilter}
+                          />
+                          <div class="card-picker-grid">
+                            ${this._filteredCardPickerOptions().map(option => html`
+                              <button
+                                class="card-picker-option"
+                                type="button"
+                                @click=${() => this._addPickedCard(index, option.config)}
+                              >
+                                <span class="card-picker-option-name">${option.name}</span>
+                                <span class="card-picker-option-type">${option.type}</span>
+                                <span class="card-picker-option-description">${option.description}</span>
+                              </button>
+                            `)}
+                          </div>
                         </div>
                       ` : ''}
                     </div>
@@ -710,10 +796,6 @@ export class SimpleTabsEditor extends LitElement {
           <ha-icon icon="mdi:plus" style="margin-right: 8px;"></ha-icon>
           Add Tab
         </mwc-button>
-        
-        <p class="help-text">
-            <strong>Note:</strong> Advanced styling and logic features must be configured via the YAML code editor.
-        </p>
       </div>
     `;
   }
@@ -723,19 +805,17 @@ export class SimpleTabsEditor extends LitElement {
       padding: 16px;
     }
     .global-options {
-        margin-bottom: 24px;
-        padding: 14px;
-        border: 1px solid var(--divider-color);
-        border-radius: 12px;
-        background: var(--ha-card-background, rgba(0,0,0,0.12));
+      display: grid;
+      gap: 8px;
+      margin-bottom: 24px;
     }
-    .settings-title {
-      margin: 0 0 10px 0;
-      font-size: 1.1rem;
+    .panel-header {
       font-weight: 500;
     }
-    .behavior-title {
-      margin-top: 18px;
+    .panel-body {
+      display: grid;
+      gap: 14px;
+      padding: 16px;
     }
     .setting-row {
       display: flex;
@@ -752,6 +832,15 @@ export class SimpleTabsEditor extends LitElement {
       display: grid;
       gap: 8px;
       margin-top: 14px;
+    }
+    .compact-group {
+      margin-top: 0;
+    }
+    .two-column-grid,
+    .config-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px 16px;
     }
     .select-label {
       font-size: 0.95rem;
@@ -778,7 +867,6 @@ export class SimpleTabsEditor extends LitElement {
       background: var(--sidebar-background-color);
     }
     p {margin: 12px 0 0 0;}
-    .help-text { font-size: 0.9em; color: var(--secondary-text-color); margin-top: 24px; }
     .summary-header {
       display: flex;
       align-items: center;
@@ -873,6 +961,8 @@ export class SimpleTabsEditor extends LitElement {
       border: 1px solid var(--divider-color);
     }
     .card-picker-shell {
+      display: grid;
+      gap: 12px;
       margin-top: 12px;
       padding: 12px;
       border-radius: 16px;
@@ -891,8 +981,62 @@ export class SimpleTabsEditor extends LitElement {
       cursor: pointer;
       text-align: center;
     }
-    .card-picker-shell hui-card-picker {
-      --ha-card-border-radius: 16px;
+    .card-picker-search {
+      box-sizing: border-box;
+      width: 100%;
+      min-height: 42px;
+      padding: 8px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--divider-color);
+      background: var(--card-background-color, var(--ha-card-background, #1f1f1f));
+      color: var(--primary-text-color);
+      font: inherit;
+    }
+    .card-picker-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 8px;
+      max-height: 420px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+    .card-picker-option {
+      display: grid;
+      gap: 4px;
+      min-height: 96px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--divider-color);
+      background: var(--ha-card-background, rgba(0, 0, 0, 0.14));
+      color: var(--primary-text-color);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+    .card-picker-option:hover,
+    .card-picker-option:focus-visible {
+      border-color: var(--accent-color);
+      outline: none;
+    }
+    .card-picker-option-name {
+      font-weight: 500;
+    }
+    .card-picker-option-type,
+    .card-picker-option-description {
+      color: var(--secondary-text-color);
+      font-size: 0.9rem;
+      line-height: 1.25;
+    }
+    .inline-card-editor {
+      display: block;
+      margin: -2px 0 12px 0;
+      padding: 12px;
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--card-background-color, var(--ha-card-background, #1f1f1f)) 88%, black 12%);
+      border: 1px solid var(--divider-color);
+    }
+    .inline-card-editor hui-card-element-editor {
+      display: block;
     }
     .tab-settings-row {
         display: grid;
@@ -911,6 +1055,14 @@ export class SimpleTabsEditor extends LitElement {
     .reorder-btn[disabled] {
         opacity: 0.3;
         pointer-events: none;
+    }
+
+    @media (max-width: 720px) {
+      .two-column-grid,
+      .config-grid,
+      .tab-settings-row {
+        grid-template-columns: 1fr;
+      }
     }
   `;
 }
