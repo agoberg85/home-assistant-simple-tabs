@@ -22,7 +22,6 @@ Subscribe to Youtube channel: https://www.youtube.com/@My_Smart_Home
 - Optional swipe animations
 - Optional tab memory (`false`, `true`, `per_device`)
 - Optional haptic feedback on supported devices
-- Fixed outer tab bar with horizontal scrolling inside when needed
 - Extensive style options for the card, tab bar, and individual buttons
 - Visual editor with:
   - Card list management (move/edit/delete)
@@ -45,7 +44,7 @@ Subscribe to Youtube channel: https://www.youtube.com/@My_Smart_Home
 
 1.  Download the `simple-tabs.js` file from the latest [release](https://github.com/agoberg85/home-assistant-simple-tabs/releases).
 2.  Copy the file to the `www` directory in your Home Assistant `config` folder.
-3.  In your Lovelace dashboard, go to "Manage Resources" and add a new resource:
+3.  In Home Assistant, go to Settings > Dashboard then "Manage Resources" and add a new resource:
     - URL: `/local/simple-tabs.js`
     - Resource Type: `JavaScript Module`
 
@@ -128,15 +127,6 @@ tabs:
 | `remember_tab` | boolean/string | Optional | Remember last selected tab. (`false`, `true`, `'per_device'`) | `false` |
 | `haptic_feedback` | boolean | Optional | Vibration feedback on tab change (mobile only). | `false` |
 
-### 1.5.0 Migration Notes
-
-Breaking changes in `1.5.0`:
-- The visual editor and docs now use the clearer `tabs_alignment`, `card_*`, `bar_*`, and `button_*` option names.
-- `show_fade` has been removed from the visual editor and no longer does anything.
-- The tab bar layout now treats the outer bar as a stable shell and scrolls the buttons inside it.
-
-Legacy styling aliases are still accepted for now: `alignment`, `background-color`, `border-color`, `text-color`, `hover-color`, `hover-border-color`, `active-text-color`, `active-background`, `container_*`, and `tab_buttons_*`. New configs should use the clearer names above.
-
 ### Styling Layers
 
 - `card_*`: styles the overall card wrapper around the tab row and content.
@@ -150,16 +140,18 @@ Legacy styling aliases are still accepted for now: `alignment`, `background-colo
 ```yaml
 type: custom:simple-tabs
 tabs_alignment: center
-card_background: transparent
-card_padding: 0 0 12px 0
-bar_background: "#2f2f2f"
-bar_border: "1px solid rgba(255,255,255,0.12)"
-bar_padding: 12px
+tab_position: top
+bar_background: transparent
+bar_border: 1px solid var(--gray400)
+bar_padding: 2px
 bar_border_radius: 999px
 button_background: transparent
 button_border_color: transparent
-button_active_background: "linear-gradient(90deg, #e59bc2, #f6c7a8)"
-button_active_text_color: "#222"
+button_text_color: var(--gray400)
+button_hover_color: var(--gray600)
+button_active_background: var(--active-big)
+button_active_text_color: var(--gray100)
+button_hover_border_color: transparent
 tabs:
   - title: Lys
     icon: mdi:home
@@ -378,42 +370,6 @@ tabs:
           - "1928371928371928371928"  # Mom
     card:
 	       # ...
-```
-
-## Example Usage
-
-### Full Example
-
-This configuration demonstrates dynamic defaults, user restrictions, and the compact "hide inactive titles" style.
-
-```yaml
-type: custom:simple-tabs
-tabs_alignment: start
-hide_inactive_tab_titles: true
-default_tab:
-  - tab: 2
-    conditions:
-      - entity: light.kitchen_lights
-        state: 'on'
-  - tab: 1
-tabs:
-  - title: Livingroom
-    icon: mdi:sofa
-    card:
-      type: markdown
-      content: Livingroom goes here
-  - title: Kitchen
-    icon: mdi:silverware-fork-knife
-    card:
-      type: markdown
-      content: Kitchen goes here
-  - title: Admin
-    icon: mdi:cog
-    conditions:
-      - user: "YOUR_ADMIN_ID_HERE"
-    card:
-	      type: markdown
-	      content: Sensitive admin controls...
 ```
 
 ## Troubleshooting
