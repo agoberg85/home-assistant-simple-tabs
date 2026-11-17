@@ -101,6 +101,7 @@ tabs:
 | `tabs` | list | **Required** | A list of tab objects to display. See below. | |
 | `tabs_alignment` | string | Optional | Positions the tab bar within the card. (`start`, `center`, `end`) | `'center'` |
 | `default_tab` | number/list | Optional | Defines the default tab. Can be a static number (1-based) or a list of conditional rules (see Advanced Configuration). | `1` |
+| `auto_select` | list | Optional | Rules that switch to a tab when their conditions become true (see Advanced Configuration). | none |
 | `hide_inactive_tab_titles` | boolean | Optional | If `true`, hides the title text on tabs that are not currently active (showing only the icon). | `false` |
 | `pre-load` | boolean | Optional | If `true`, renders all tab content on load for faster switching. | `false` |
 | `button_background`| string | Optional | CSS color/gradient for each tab button background. | `none` |
@@ -204,6 +205,7 @@ This condition checks if a specific entity has a specific state. It also support
 | :--- | :--- | :--- |
 | `entity`| string | The entity ID to check. |
 | `state` | string | The state the entity must have for the condition to be true. Supports exact matches like `'on'` or `'0'`, and numeric comparisons like `'> 0'`, `'>= 10'`, `'< 5'`, `'<= 5'`, `'= 3'`, or `'== 3'`. |
+| `attribute` | string | Optional. Compares this attribute of the entity instead of its state. |
 
 **Example:** Show a "Security" tab only if an `input_boolean` is on.
 ```yaml
@@ -338,6 +340,19 @@ default_tab:
         state: 'below_horizon'
 	  # 3. Fallback to Tab 1
 	  - tab: 1
+```
+
+### Auto Select
+
+`auto_select` switches to a tab the moment a rule's conditions become true, for example to bring a timer forward when it finishes. It uses the same `tab` and `conditions` as `default_tab`. Conditions that are already true when the page loads don't count, so a reload never moves the tab.
+
+```yaml
+auto_select:
+  - tab: 1
+    conditions:
+      - entity: timer.kitchen
+        attribute: last_transition
+        state: finished
 ```
 
 ### Deep Linking

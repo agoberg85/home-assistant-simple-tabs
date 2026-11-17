@@ -16,7 +16,7 @@ function configChanged(oldConfig: TabsCardConfig | undefined, newConfig: TabsCar
 }
 
 // --- INTERFACES ---
-export interface StateCondition { entity: string; state: string; }
+export interface StateCondition { entity: string; state: string; attribute?: string; }
 export interface TemplateCondition { template: string; }
 export interface UserCondition { user: string | string[]; }
 export type Condition = StateCondition | TemplateCondition | UserCondition;
@@ -57,6 +57,7 @@ export interface TabsCardConfig {
   type: string;
   tabs: TabConfig[];
   default_tab?: number | DefaultTabRule[];
+  auto_select?: DefaultTabRule[];
   hide_inactive_tab_titles?: boolean;
   show_fade?: boolean;
   'pre-load'?: boolean;
@@ -143,6 +144,8 @@ export class SimpleTabs extends LitElement {
   private _lastCheckedUrl = '';
   private _badgeRuleResults: boolean[][] = [];
   private _defaultTabTemplateResults: boolean[][] = [];
+  private _autoSelectTemplateResults: (boolean | undefined)[][] = [];
+  private _autoSelectActive: (boolean | undefined)[] = [];
   // Swipe gesture tracking
   private _touchStartX: number | null = null;
   private _touchStartY: number | null = null;
@@ -421,6 +424,8 @@ export class SimpleTabs extends LitElement {
         (rule.conditions ?? []).map(cond => ('template' in cond ? false : true))
       )
       : [];
+    this._autoSelectTemplateResults = (config.auto_select ?? []).map(() => []);
+    this._autoSelectActive = [];
     this._visibleIndices = config.tabs.map((_, i) => i); // Assume all visible initially
 
     this._initialized = false;
@@ -542,6 +547,27 @@ export class SimpleTabs extends LitElement {
     }
   }
 
+  // Switches tab when a rule's conditions become true. A rule's first evaluation only records a
+  // baseline, so loading the page while the conditions already hold never moves the tab.
+  private _evaluateAutoSelect(): void {
+    this._config?.auto_select?.forEach((rule, ruleIndex) => {
+      const templateResults = this._autoSelectTemplateResults[ruleIndex] ?? [];
+      const templatesPending = rule.conditions?.some((cond, conditionIndex) =>
+        'template' in cond && templateResults[conditionIndex] === undefined
+      );
+      if (templatesPending) return;
+
+      const isActive = this._areConditionsMet(rule.conditions, templateResults as boolean[]);
+      const wasActive = this._autoSelectActive[ruleIndex];
+      this._autoSelectActive[ruleIndex] = isActive;
+
+      const index = rule.tab - 1;
+      if (isActive && wasActive === false && this._visibleIndices.includes(index)) {
+        this._selectTab(index);
+      }
+    });
+  }
+
   private _areConditionsMet(conditions?: Condition[], templateResults: boolean[] = []): boolean {
     if (!conditions?.length) return true;
 
@@ -620,6 +646,17 @@ export class SimpleTabs extends LitElement {
       });
     }
 
+    this._config.auto_select?.forEach((rule, ruleIndex) => {
+      rule.conditions?.forEach((cond, conditionIndex) => {
+        if ('template' in cond) {
+          promises.push(renderTemplate(cond.template, msg => {
+            this._autoSelectTemplateResults[ruleIndex][conditionIndex] = this._isTruthyTemplateResult(msg.result);
+            this._evaluateAutoSelect();
+          }));
+        }
+      });
+    });
+
     await Promise.all(promises);
   }
 
@@ -630,6 +667,10 @@ export class SimpleTabs extends LitElement {
     // 1. Recalculate visibility if dependencies change
     if (changedProps.has('_tabTemplateConditionResults') || changedProps.has('hass') || changedProps.has('_config')) {
       this._calculateVisibleIndices();
+    }
+
+    if (changedProps.has('hass') && this.hass) {
+      this._evaluateAutoSelect();
     }
 
     // 2. Ensure selected tab is valid (Auto-select first visible if current is hidden)
@@ -694,8 +735,10 @@ export class SimpleTabs extends LitElement {
 
   private _checkCondition(c: Condition): boolean {
     if ('entity' in c) {
-      const actualState = this.hass.states[c.entity]?.state;
-      if (actualState === undefined) return false;
+      const stateObj = this.hass.states[c.entity];
+      const rawValue = c.attribute ? stateObj?.attributes?.[c.attribute] : stateObj?.state;
+      if (rawValue === undefined) return false;
+      const actualState = String(rawValue);
 
       const numericComparison = this._parseNumericComparison(c.state);
       if (numericComparison) {
