@@ -523,6 +523,13 @@ export class SimpleTabsEditor extends LitElement {
                   </select>
                 </div>
               </div>
+              <div class="setting-row">
+                <span>Keep active tab at the alignment position</span>
+                <ha-switch
+                  .checked=${this._config.align_active_tab || false}
+                  @change=${(e: Event) => this._toggleOption(e, 'align_active_tab')}
+                ></ha-switch>
+              </div>
               <div class="select-group compact-group">
                 <label class="select-label">Remember last tab</label>
                 <select

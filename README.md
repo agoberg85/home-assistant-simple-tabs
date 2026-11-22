@@ -100,6 +100,7 @@ tabs:
 | `type` | string | **Required** | `custom:simple-tabs` | |
 | `tabs` | list | **Required** | A list of tab objects to display. See below. | |
 | `tabs_alignment` | string | Optional | Positions the tab bar within the card. (`start`, `center`, `end`) | `'center'` |
+| `align_active_tab` | boolean | Optional | When the tabs overflow the bar, keeps the active tab at the `tabs_alignment` position (`start`, `center` or `end`) of the visible bar and scrolls the strip underneath it. Movement stops at the beginning/end of the tab list. When `false`, the active tab is centered. | `false` |
 | `default_tab` | number/list | Optional | Defines the default tab. Can be a static number (1-based) or a list of conditional rules (see Advanced Configuration). | `1` |
 | `auto_select` | list | Optional | Rules that switch to a tab when their conditions become true (see Advanced Configuration). | none |
 | `hide_inactive_tab_titles` | boolean | Optional | If `true`, hides the title text on tabs that are not currently active (showing only the icon). | `false` |

@@ -80,6 +80,7 @@ export interface TabsCardConfig {
   bar_border_radius?: string;
   tabs_gap?: string;
   button_padding?: string;
+  align_active_tab?: boolean;
   show_arrows?: boolean;
   arrow_color?: string;
   arrow_size?: string;
@@ -903,7 +904,21 @@ export class SimpleTabs extends LitElement {
     if (tabsContainer && activeButton) {
       const containerRect = tabsContainer.getBoundingClientRect();
       const buttonRect = activeButton.getBoundingClientRect();
-      const scrollLeft = buttonRect.left - containerRect.left + tabsContainer.scrollLeft - containerRect.width / 2 + buttonRect.width / 2;
+      const buttonLeft = buttonRect.left - containerRect.left + tabsContainer.scrollLeft;
+      let scrollLeft = buttonLeft - containerRect.width / 2 + buttonRect.width / 2;
+
+      if (this._config?.align_active_tab) {
+        // Keep the active tab at the configured position of the visible bar.
+        // The browser clamps scrollLeft, so the strip stops moving at either end.
+        const alignment = this._getConfigValue(this._config.tabs_alignment, this._config.alignment) || 'center';
+        const inset = this._getArrowInset();
+        if (alignment === 'start') {
+          scrollLeft = buttonLeft - inset;
+        } else if (alignment === 'end') {
+          scrollLeft = buttonLeft + buttonRect.width - tabsContainer.clientWidth + inset;
+        }
+      }
+
       tabsContainer.scrollTo({
         left: scrollLeft,
         behavior: smooth ? 'smooth' : 'auto'
@@ -913,8 +928,15 @@ export class SimpleTabs extends LitElement {
 
 
 
+  /** Width reserved for an overflow arrow, so an aligned active tab is not covered by it. */
+  private _getArrowInset(): number {
+    if (!this._config?.show_arrows) return 0;
+    const arrow = this.shadowRoot?.querySelector<HTMLElement>('.scroll-arrow');
+    return arrow?.offsetWidth ?? 0;
+  }
+
   private _needsTabBarObservers(): boolean {
-    return !!this._config?.show_arrows;
+    return !!this._config?.show_arrows || !!this._config?.align_active_tab;
   }
 
   /** Observe the tab bar size only while an option depends on it. */
@@ -946,6 +968,11 @@ export class SimpleTabs extends LitElement {
   }
 
   private _handleTabBarResize(): void {
+    if (this._config?.align_active_tab) {
+      // Same (smooth) scroll as on tab change, so a strip resize caused by a tab change,
+      // e.g. with hide_inactive_tab_titles, does not cut the running scroll short.
+      this._scrollToActiveTab();
+    }
     this._scheduleScrollIndicatorUpdate();
   }
 
