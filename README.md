@@ -119,6 +119,9 @@ tabs:
 | `bar_padding`| string | Optional | Padding between the tab bar shell and the button strip. | 1px 2px |
 | `bar_border_radius`| string | Optional | Border radius for the outer tab bar shell. | 0 |
 | `tabs_gap`| string | Optional | Gap between buttons | 6px |
+| `show_arrows` | boolean | Optional | Show a left/right arrow when tabs are hidden outside the visible area of the tab bar. Each arrow only appears while there are hidden tabs on that side. | `false` |
+| `arrow_color` | string | Optional | Color of the overflow arrows. | Your theme's `primary-text-color` |
+| `arrow_size` | string | Optional | Size of the overflow arrows (e.g. `32px`). | 24px |
 | `button_padding`| string | Optional | Padding inside each button | 12px |
 | `tab_position` | string | Optional | Position of tabs. (`top`, `bottom`) | `'top'` |
 | `enable_swipe` | boolean | Optional | Enable swipe gestures to switch tabs on mobile. | `true` |
