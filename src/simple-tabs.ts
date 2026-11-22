@@ -80,6 +80,8 @@ export interface TabsCardConfig {
   bar_border_radius?: string;
   tabs_gap?: string;
   button_padding?: string;
+  tab_width?: string;
+  icon_height?: string;
   tab_position?: 'top' | 'bottom';
   enable_swipe?: boolean;
   swipe_animation?: boolean;
@@ -446,6 +448,14 @@ export class SimpleTabs extends LitElement {
 
   private _getConfigValue<T>(...values: (T | undefined)[]): T | undefined {
     return values.find((value) => value !== undefined);
+  }
+
+  /** Returns a trimmed CSS length option, or undefined when it is not set (or left empty in the editor). */
+  private _getCssOption(value: string | number | undefined): string | undefined {
+    if (value === undefined || value === null) return undefined;
+    const text = String(value).trim();
+    if (!text) return undefined;
+    return /^\d+(\.\d+)?$/.test(text) ? `${text}px` : text;
   }
 
   private _getBadgeTemplates(tab: TabConfig): string[] {
@@ -1134,6 +1144,13 @@ export class SimpleTabs extends LitElement {
   protected render(): TemplateResult {
     if (!this._config || !this.hass) return html``;
 
+    const tabWidth = this._getCssOption(this._config.tab_width);
+    const iconSize = this._getCssOption(this._config.icon_height);
+    // With hidden inactive titles, only the active (titled) tab gets the fixed width
+    // so inactive tabs stay compact (icon only).
+    const hasFixedWidth = (isActive: boolean): boolean =>
+      !!tabWidth && (!this._config.hide_inactive_tab_titles || isActive);
+
     const styles: { [key: string]: string | undefined } = {
       '--simple-tabs-bg-color': this._getConfigValue(this._config.button_background, this._config['background-color']),
       '--simple-tabs-border-color': this._getConfigValue(this._config.button_border_color, this._config['border-color']),
@@ -1152,6 +1169,8 @@ export class SimpleTabs extends LitElement {
       '--simple-tabs-inactive-title-display': this._config.hide_inactive_tab_titles ? 'none' : 'inline',
       '--simple-tabs-gap': this._config.tabs_gap,
       '--simple-tabs-button-padding': this._config.button_padding,
+      '--simple-tabs-tab-width': tabWidth,
+      '--simple-tabs-icon-size': iconSize,
       // Note: --simple-tabs-margin-bottom is NOT here anymore, it's in updated()
     };
 
@@ -1163,14 +1182,14 @@ export class SimpleTabs extends LitElement {
     const positionClass = this._config.tab_position === 'bottom' ? 'position-bottom' : 'position-top';
 
     const tabsSection = html`
-      <div class="tabs-row ${alignmentClass}">
+      <div class="tabs-row ${alignmentClass} ${iconSize ? 'custom-icon-size' : ''}">
         <div class="tabs-viewport">
           <div class="tabs-scroll" @mousedown=${this._handleDragStart}>
             <div class="tabs-container">
               <div class="tabs" role="tablist">
               ${this._visibleIndices.map(originalIndex => html`
                 <button
-                  class="tab-button ${originalIndex === this._selectedTabIndex ? 'active' : ''}"
+                  class="tab-button ${originalIndex === this._selectedTabIndex ? 'active' : ''} ${hasFixedWidth(originalIndex === this._selectedTabIndex) ? 'fixed-width' : ''}"
                   @click=${() => this._selectTab(originalIndex, true, 'click')}
                 >
                   ${this._renderedIcons[originalIndex] ? html`<ha-icon .icon=${this._renderedIcons[originalIndex]}></ha-icon>` : ''}
@@ -1339,6 +1358,25 @@ export class SimpleTabs extends LitElement {
 
     .tab-button:not(.active) span:not(.badge) {
         display: var(--simple-tabs-inactive-title-display, inline);
+    }
+
+    /* tab_width: fixed button width, long titles are truncated */
+    .tab-button.fixed-width {
+      flex: 0 0 var(--simple-tabs-tab-width);
+      width: var(--simple-tabs-tab-width);
+      max-width: var(--simple-tabs-tab-width);
+    }
+    .tab-button.fixed-width span:not(.badge) {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* icon_height: icon size independent of the text */
+    .tabs-row.custom-icon-size .tab-button ha-icon {
+      --mdc-icon-size: var(--simple-tabs-icon-size);
+      display: flex;
+      flex: 0 0 auto;
     }
     
     .badge {

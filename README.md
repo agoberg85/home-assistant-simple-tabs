@@ -120,6 +120,8 @@ tabs:
 | `bar_border_radius`| string | Optional | Border radius for the outer tab bar shell. | 0 |
 | `tabs_gap`| string | Optional | Gap between buttons | 6px |
 | `button_padding`| string | Optional | Padding inside each button | 12px |
+| `tab_width` | string | Optional | Fixed width of each tab button (e.g. `100px`). Long titles are truncated. With `hide_inactive_tab_titles: true` only the active tab gets this width, inactive tabs stay compact (icon only). | auto |
+| `icon_height` | string | Optional | Size of the tab icons, independent of the text size (e.g. `28px`). | 24px |
 | `tab_position` | string | Optional | Position of tabs. (`top`, `bottom`) | `'top'` |
 | `enable_swipe` | boolean | Optional | Enable swipe gestures to switch tabs on mobile. | `true` |
 | `swipe_animation` | boolean | Optional | Enable animated transitions for swipe gestures. | `true` |

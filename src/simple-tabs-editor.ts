@@ -604,6 +604,8 @@ export class SimpleTabsEditor extends LitElement {
                 ${this._renderConfigInput('button_active_background', 'Active Button Background', 'var(--primary-color)')}
                 ${this._renderConfigInput('button_active_text_color', 'Active Button Text Color', 'var(--text-primary-color)')}
                 ${this._renderConfigInput('button_padding', 'Button Padding', '8px 16px')}
+                ${this._renderConfigInput('tab_width', 'Tab Width', 'auto')}
+                ${this._renderConfigInput('icon_height', 'Icon Size', '24px')}
               </div>
             </div>
           </ha-expansion-panel>
