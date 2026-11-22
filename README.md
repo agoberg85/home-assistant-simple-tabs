@@ -123,7 +123,7 @@ tabs:
 | `tab_position` | string | Optional | Position of tabs. (`top`, `bottom`) | `'top'` |
 | `enable_swipe` | boolean | Optional | Enable swipe gestures to switch tabs on mobile. | `true` |
 | `swipe_animation` | boolean | Optional | Enable animated transitions for swipe gestures. | `true` |
-| `tab_click_animation` | boolean | Optional | Enable animated transitions when changing tabs by clicking the tab buttons. | `true` |
+| `tab_click_animation` | boolean | Optional | Enable animated transitions when changing tabs by clicking the tab buttons. Defaults to the value of `swipe_animation`. When both are `false`, tab changes are fully instant (no content slide, no button transitions, no smooth scrolling of the tab bar). | `true` |
 | `swipe_threshold` | number | Optional | Pixels of movement required to trigger a swipe. | `50` |
 | `remember_tab` | boolean/string | Optional | Remember last selected tab. (`false`, `true`, `'per_device'`) | `false` |
 | `haptic_feedback` | boolean | Optional | Vibration feedback on tab change (mobile only). | `false` |

@@ -887,9 +887,12 @@ export class SimpleTabs extends LitElement {
       const containerRect = tabsContainer.getBoundingClientRect();
       const buttonRect = activeButton.getBoundingClientRect();
       const scrollLeft = buttonRect.left - containerRect.left + tabsContainer.scrollLeft - containerRect.width / 2 + buttonRect.width / 2;
+      // 'auto' would fall back to the CSS scroll-behavior (smooth), so use 'instant'
+      // whenever the move should not be animated.
+      const animate = smooth && this._hasAnimatedTransitionsEnabled();
       tabsContainer.scrollTo({
         left: scrollLeft,
-        behavior: smooth ? 'smooth' : 'auto'
+        behavior: animate ? 'smooth' : 'instant'
       });
     }
   }
@@ -1225,7 +1228,7 @@ export class SimpleTabs extends LitElement {
     `;
 
     return html`
-      <div class="card-container ${positionClass}" style=${styleMap(styles)}>
+      <div class="card-container ${positionClass} ${shouldAnimateTransitions ? '' : 'no-animations'}" style=${styleMap(styles)}>
         ${this._config.tab_position === 'bottom' ? html`${contentSection}${tabsSection}` : html`${tabsSection}${contentSection}`}
       </div>
     `;
@@ -1379,6 +1382,14 @@ export class SimpleTabs extends LitElement {
       color: var(--simple-tabs-active-text-color, var(--text-primary-color)); 
       background: var(--simple-tabs-active-bg, var(--primary-color)); 
       outline-color: transparent; 
+    }
+
+    /* All transitions disabled: switch tabs instantly, including the tab bar */
+    .card-container.no-animations .tabs-scroll {
+      scroll-behavior: auto;
+    }
+    .card-container.no-animations .tab-button {
+      transition: none;
     }
     
     /* Content Container Styles */
