@@ -100,6 +100,7 @@ tabs:
 | `type` | string | **Required** | `custom:simple-tabs` | |
 | `tabs` | list | **Required** | A list of tab objects to display. See below. | |
 | `tabs_alignment` | string | Optional | Positions the tab bar within the card. (`start`, `center`, `end`) | `'center'` |
+| `align_active_tab` | boolean | Optional | When the tabs overflow the bar, keeps the active tab at the `tabs_alignment` position (`start`, `center` or `end`) of the visible bar and scrolls the strip underneath it. Movement stops at the beginning/end of the tab list. When `false`, the active tab is centered. | `false` |
 | `default_tab` | number/list | Optional | Defines the default tab. Can be a static number (1-based) or a list of conditional rules (see Advanced Configuration). | `1` |
 | `auto_select` | list | Optional | Rules that switch to a tab when their conditions become true (see Advanced Configuration). | none |
 | `hide_inactive_tab_titles` | boolean | Optional | If `true`, hides the title text on tabs that are not currently active (showing only the icon). | `false` |
@@ -119,6 +120,9 @@ tabs:
 | `bar_padding`| string | Optional | Padding between the tab bar shell and the button strip. | 1px 2px |
 | `bar_border_radius`| string | Optional | Border radius for the outer tab bar shell. | 0 |
 | `tabs_gap`| string | Optional | Gap between buttons | 6px |
+| `show_arrows` | boolean | Optional | Show a left/right arrow when tabs are hidden outside the visible area of the tab bar. Each arrow only appears while there are hidden tabs on that side. | `false` |
+| `arrow_color` | string | Optional | Color of the overflow arrows. | Your theme's `primary-text-color` |
+| `arrow_size` | string | Optional | Size of the overflow arrows (e.g. `32px`). | 24px |
 | `button_padding`| string | Optional | Padding inside each button | 12px |
 | `tab_position` | string | Optional | Position of tabs. (`top`, `bottom`) | `'top'` |
 | `enable_swipe` | boolean | Optional | Enable swipe gestures to switch tabs on mobile. | `true` |
