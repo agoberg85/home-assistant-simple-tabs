@@ -175,6 +175,12 @@ export class SimpleTabsEditor extends LitElement {
     this._valueChanged({ ...this._config, tab_click_animation: target.checked });
   }
 
+  private _toggleOption(ev: Event, field: keyof TabsCardConfig): void {
+    if (!this._config) return;
+    const target = ev.target as HaSwitch;
+    this._valueChanged({ ...this._config, [field]: target.checked });
+  }
+
   private _toggleHaptic(ev: Event): void {
     if (!this._config) return;
     const target = ev.target as HaSwitch;
@@ -582,7 +588,18 @@ export class SimpleTabsEditor extends LitElement {
           <ha-expansion-panel>
             <div slot="header" class="panel-header">Tab Bar</div>
             <div class="panel-body">
+              <div class="setting-row">
+                <span>Show arrows when tabs overflow</span>
+                <ha-switch
+                  .checked=${this._config.show_arrows || false}
+                  @change=${(e: Event) => this._toggleOption(e, 'show_arrows')}
+                ></ha-switch>
+              </div>
               <div class="config-grid">
+                ${this._config.show_arrows ? html`
+                  ${this._renderConfigInput('arrow_color', 'Arrow Color', 'var(--primary-text-color)')}
+                  ${this._renderConfigInput('arrow_size', 'Arrow Size', '24px')}
+                ` : ''}
                 ${this._renderConfigInput('bar_background', 'Bar Background', 'transparent')}
                 ${this._renderConfigInput('bar_border', 'Bar Border', '1px solid rgba(255,255,255,0.12)')}
                 ${this._renderConfigInput('bar_padding', 'Bar Padding', '4px')}

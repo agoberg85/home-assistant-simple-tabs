@@ -80,6 +80,9 @@ export interface TabsCardConfig {
   bar_border_radius?: string;
   tabs_gap?: string;
   button_padding?: string;
+  show_arrows?: boolean;
+  arrow_color?: string;
+  arrow_size?: string;
   tab_position?: 'top' | 'bottom';
   enable_swipe?: boolean;
   swipe_animation?: boolean;
@@ -139,6 +142,9 @@ export class SimpleTabs extends LitElement {
   private _helpersPromise?: Promise<void>;
   private _templateUnsubscribers: (() => void)[] = [];
   private _disconnectCleanupTimeout?: number;
+  private _tabBarResizeObserver?: ResizeObserver;
+  private _observedTabsEl?: HTMLElement;
+  private _scrollIndicatorFrame = 0;
   private _hassSet = false;
   private _initialized = false;
   private _lastCheckedUrl = '';
@@ -195,10 +201,13 @@ export class SimpleTabs extends LitElement {
 
     // Immediate check
     this._handleDeepLink();
+
+    if (this.hasUpdated) this._syncTabBarObservers();
   }
 
   public async disconnectedCallback(): Promise<void> {
     super.disconnectedCallback();
+    this._stopTabBarObservers();
     window.removeEventListener('hashchange', this._handleDeepLink);
     window.removeEventListener('popstate', this._handleDeepLink);
     window.removeEventListener('location-changed', this._handleDeepLink);
@@ -446,6 +455,14 @@ export class SimpleTabs extends LitElement {
 
   private _getConfigValue<T>(...values: (T | undefined)[]): T | undefined {
     return values.find((value) => value !== undefined);
+  }
+
+  /** Returns a trimmed CSS length option, or undefined when it is not set (or left empty in the editor). */
+  private _getCssOption(value: string | number | undefined): string | undefined {
+    if (value === undefined || value === null) return undefined;
+    const text = String(value).trim();
+    if (!text) return undefined;
+    return /^\d+(\.\d+)?$/.test(text) ? `${text}px` : text;
   }
 
   private _getBadgeTemplates(tab: TabConfig): string[] {
@@ -896,6 +913,65 @@ export class SimpleTabs extends LitElement {
 
 
 
+  private _needsTabBarObservers(): boolean {
+    return !!this._config?.show_arrows;
+  }
+
+  /** Observe the tab bar size only while an option depends on it. */
+  private _syncTabBarObservers(): void {
+    const tabsEl = this._tabsEl;
+    if (!this._needsTabBarObservers() || !tabsEl || typeof ResizeObserver === 'undefined') {
+      this._stopTabBarObservers();
+      return;
+    }
+    if (tabsEl === this._observedTabsEl) return;
+
+    this._tabBarResizeObserver?.disconnect();
+    this._tabBarResizeObserver ??= new ResizeObserver(() => this._handleTabBarResize());
+    // Observe both the viewport and the strip: the strip grows when titles,
+    // icons or visible tabs change, the viewport when the card is resized.
+    this._tabBarResizeObserver.observe(tabsEl);
+    const strip = tabsEl.querySelector('.tabs');
+    if (strip) this._tabBarResizeObserver.observe(strip);
+    this._observedTabsEl = tabsEl;
+  }
+
+  private _stopTabBarObservers(): void {
+    this._tabBarResizeObserver?.disconnect();
+    this._observedTabsEl = undefined;
+    if (this._scrollIndicatorFrame) {
+      cancelAnimationFrame(this._scrollIndicatorFrame);
+      this._scrollIndicatorFrame = 0;
+    }
+  }
+
+  private _handleTabBarResize(): void {
+    this._scheduleScrollIndicatorUpdate();
+  }
+
+  private _scheduleScrollIndicatorUpdate = (): void => {
+    if (!this._config?.show_arrows || this._scrollIndicatorFrame) return;
+    this._scrollIndicatorFrame = requestAnimationFrame(() => {
+      this._scrollIndicatorFrame = 0;
+      this._updateScrollIndicators();
+    });
+  };
+
+  /** Toggles can-scroll-left/right on the viewport, which shows the arrows. */
+  private _updateScrollIndicators(): void {
+    const tabsEl = this._tabsEl;
+    const viewport = this.shadowRoot?.querySelector('.tabs-viewport');
+    if (!tabsEl || !viewport) return;
+
+    const enabled = !!this._config?.show_arrows;
+    const maxScroll = tabsEl.scrollWidth - tabsEl.clientWidth;
+    const canScrollLeft = enabled && tabsEl.scrollLeft > 1;
+    const canScrollRight = enabled && tabsEl.scrollLeft < maxScroll - 1;
+
+    viewport.classList.toggle('can-scroll-left', canScrollLeft);
+    viewport.classList.toggle('can-scroll-right', canScrollRight);
+  }
+
   private async _createCards(tabConfigs: TabConfig[]): Promise<(LovelaceCard | null)[]> {
     await this._loadHelpers();
     return Promise.all(tabConfigs.map(tab => this._createCard(tab)));
@@ -963,6 +1039,9 @@ export class SimpleTabs extends LitElement {
     if (changedProps.has('_selectedTabIndex')) {
       this._scrollToActiveTab();
     }
+
+    this._syncTabBarObservers();
+    this._scheduleScrollIndicatorUpdate();
   }
 
   public firstUpdated(): void {
@@ -1152,6 +1231,8 @@ export class SimpleTabs extends LitElement {
       '--simple-tabs-inactive-title-display': this._config.hide_inactive_tab_titles ? 'none' : 'inline',
       '--simple-tabs-gap': this._config.tabs_gap,
       '--simple-tabs-button-padding': this._config.button_padding,
+      '--simple-tabs-arrow-color': this._config.arrow_color,
+      '--simple-tabs-arrow-size': this._getCssOption(this._config.arrow_size),
       // Note: --simple-tabs-margin-bottom is NOT here anymore, it's in updated()
     };
 
@@ -1165,7 +1246,7 @@ export class SimpleTabs extends LitElement {
     const tabsSection = html`
       <div class="tabs-row ${alignmentClass}">
         <div class="tabs-viewport">
-          <div class="tabs-scroll" @mousedown=${this._handleDragStart}>
+          <div class="tabs-scroll" @mousedown=${this._handleDragStart} @scroll=${this._scheduleScrollIndicatorUpdate}>
             <div class="tabs-container">
               <div class="tabs" role="tablist">
               ${this._visibleIndices.map(originalIndex => html`
@@ -1185,6 +1266,14 @@ export class SimpleTabs extends LitElement {
               </div>
             </div>
           </div>
+          ${this._config.show_arrows ? html`
+            <div class="scroll-arrow scroll-arrow-left" aria-hidden="true">
+              <ha-icon icon="mdi:chevron-left"></ha-icon>
+            </div>
+            <div class="scroll-arrow scroll-arrow-right" aria-hidden="true">
+              <ha-icon icon="mdi:chevron-right"></ha-icon>
+            </div>
+          ` : ''}
         </div>
       </div>
     `;
@@ -1311,6 +1400,33 @@ export class SimpleTabs extends LitElement {
       width: max-content;
       min-width: 0;
       padding: 2px;
+    }
+
+    /* show_arrows: indicators for tabs hidden outside the visible area */
+    .tabs-viewport {
+      position: relative;
+    }
+    .scroll-arrow {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      pointer-events: none;
+      color: var(--simple-tabs-arrow-color, var(--primary-text-color));
+      background: var(--simple-tabs-arrow-background, none);
+      --mdc-icon-size: var(--simple-tabs-arrow-size, 24px);
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.2s ease, visibility 0.2s ease;
+    }
+    .scroll-arrow-left { left: 0; }
+    .scroll-arrow-right { right: 0; }
+    .tabs-viewport.can-scroll-left .scroll-arrow-left,
+    .tabs-viewport.can-scroll-right .scroll-arrow-right {
+      opacity: 1;
+      visibility: visible;
     }
 
     .tabs-scroll.dragging { cursor: grabbing; }
